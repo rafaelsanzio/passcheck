@@ -47,12 +47,16 @@ func Refine(issues scoring.IssueSet, maxIssues int) []issue.Issue {
 }
 
 // buildRanked converts an IssueSet into a flat slice of rankedIssues,
-// preserving category order (dictionary first, then patterns, then rules).
+// preserving category order (dictionary, context, patterns, rules).
 func buildRanked(issues scoring.IssueSet) []rankedIssue {
 	var ranked []rankedIssue
 	idx := 0
 
 	for _, iss := range issues.Dictionary {
+		ranked = append(ranked, rankedIssue{iss, idx})
+		idx++
+	}
+	for _, iss := range issues.Context {
 		ranked = append(ranked, rankedIssue{iss, idx})
 		idx++
 	}
