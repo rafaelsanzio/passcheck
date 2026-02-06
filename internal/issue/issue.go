@@ -11,27 +11,27 @@ const (
 
 // Category names for grouping.
 const (
-	CategoryRule      = "rule"
-	CategoryPattern   = "pattern"
+	CategoryRule       = "rule"
+	CategoryPattern    = "pattern"
 	CategoryDictionary = "dictionary"
 )
 
 // Issue codes — stable identifiers for programmatic handling.
 const (
 	// Rules
-	CodeRuleTooShort     = "RULE_TOO_SHORT"
-	CodeRuleNoUpper      = "RULE_NO_UPPER"
-	CodeRuleNoLower      = "RULE_NO_LOWER"
-	CodeRuleNoDigit      = "RULE_NO_DIGIT"
-	CodeRuleNoSymbol     = "RULE_NO_SYMBOL"
-	CodeRuleWhitespace   = "RULE_WHITESPACE"
-	CodeRuleControlChar  = "RULE_CONTROL_CHAR"
+	CodeRuleTooShort      = "RULE_TOO_SHORT"
+	CodeRuleNoUpper       = "RULE_NO_UPPER"
+	CodeRuleNoLower       = "RULE_NO_LOWER"
+	CodeRuleNoDigit       = "RULE_NO_DIGIT"
+	CodeRuleNoSymbol      = "RULE_NO_SYMBOL"
+	CodeRuleWhitespace    = "RULE_WHITESPACE"
+	CodeRuleControlChar   = "RULE_CONTROL_CHAR"
 	CodeRuleRepeatedChars = "RULE_REPEATED_CHARS"
 
 	// Patterns
-	CodePatternKeyboard    = "PATTERN_KEYBOARD"
-	CodePatternSequence    = "PATTERN_SEQUENCE"
-	CodePatternBlock       = "PATTERN_BLOCK"
+	CodePatternKeyboard     = "PATTERN_KEYBOARD"
+	CodePatternSequence     = "PATTERN_SEQUENCE"
+	CodePatternBlock        = "PATTERN_BLOCK"
 	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
 
 	// Dictionary
