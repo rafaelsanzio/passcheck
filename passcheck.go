@@ -66,28 +66,28 @@ const (
 // Issue codes — stable identifiers for programmatic handling.
 // Consumers can switch on Code to react differently (e.g. "RULE_TOO_SHORT" vs "DICT_COMMON_PASSWORD").
 const (
-	CodeRuleTooShort      = "RULE_TOO_SHORT"
-	CodeRuleNoUpper       = "RULE_NO_UPPER"
-	CodeRuleNoLower       = "RULE_NO_LOWER"
-	CodeRuleNoDigit       = "RULE_NO_DIGIT"
-	CodeRuleNoSymbol      = "RULE_NO_SYMBOL"
-	CodeRuleWhitespace    = "RULE_WHITESPACE"
-	CodeRuleControlChar   = "RULE_CONTROL_CHAR"
-	CodeRuleRepeatedChars = "RULE_REPEATED_CHARS"
-	CodePatternKeyboard   = "PATTERN_KEYBOARD"
-	CodePatternSequence   = "PATTERN_SEQUENCE"
-	CodePatternBlock      = "PATTERN_BLOCK"
+	CodeRuleTooShort        = "RULE_TOO_SHORT"
+	CodeRuleNoUpper         = "RULE_NO_UPPER"
+	CodeRuleNoLower         = "RULE_NO_LOWER"
+	CodeRuleNoDigit         = "RULE_NO_DIGIT"
+	CodeRuleNoSymbol        = "RULE_NO_SYMBOL"
+	CodeRuleWhitespace      = "RULE_WHITESPACE"
+	CodeRuleControlChar     = "RULE_CONTROL_CHAR"
+	CodeRuleRepeatedChars   = "RULE_REPEATED_CHARS"
+	CodePatternKeyboard     = "PATTERN_KEYBOARD"
+	CodePatternSequence     = "PATTERN_SEQUENCE"
+	CodePatternBlock        = "PATTERN_BLOCK"
 	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
-	CodeDictCommonPassword = "DICT_COMMON_PASSWORD"
-	CodeDictLeetVariant    = "DICT_LEET_VARIANT"
-	CodeDictCommonWord     = "DICT_COMMON_WORD"
-	CodeDictCommonWordSub  = "DICT_COMMON_WORD_SUB"
+	CodeDictCommonPassword  = "DICT_COMMON_PASSWORD"
+	CodeDictLeetVariant     = "DICT_LEET_VARIANT"
+	CodeDictCommonWord      = "DICT_COMMON_WORD"
+	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
 )
 
 // Issue represents a single finding from a password check.
 type Issue struct {
 	Code     string `json:"code"`     // Stable identifier (e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD")
-	Message  string `json:"message"` // Human-readable description
+	Message  string `json:"message"`  // Human-readable description
 	Category string `json:"category"` // "rule", "pattern", "dictionary"
 	Severity int    `json:"severity"` // 1 (low) – 3 (high)
 }
