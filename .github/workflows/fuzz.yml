@@ -1,0 +1,46 @@
+name: Fuzz
+
+on:
+  schedule:
+    # Run nightly at 03:00 UTC.
+    - cron: "0 3 * * *"
+  workflow_dispatch: # Allow manual trigger.
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - FuzzCheck
+          - FuzzCheckBytes
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Restore fuzz cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build/fuzz
+          key: fuzz-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-${{ matrix.target }}-
+
+      - name: Run fuzz target
+        run: go test . -fuzz='^${{ matrix.target }}$' -fuzztime=60s -count=1
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: testdata/fuzz/
+          retention-days: 30
