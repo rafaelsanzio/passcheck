@@ -419,7 +419,8 @@ func TestHTTP_InvalidPasscheckConfig_FallsBackToDefault(t *testing.T) {
 	})
 	handler := HTTP(cfg, next)
 
-	body := bytes.NewBufferString(`{"password":"MyC0mpl3x!P@ss2024"}`)
+	// Use same strong password as TestHTTP_FormPassword_Strong so default config accepts it.
+	body := bytes.NewBufferString(`{"password":"Xk9$mP2!vR7@nL4&wQ"}`)
 	req := httptest.NewRequest(http.MethodPost, "/", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

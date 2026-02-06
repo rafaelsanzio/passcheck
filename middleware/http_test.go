@@ -185,11 +185,11 @@ func TestDefaultHTTPExtractor_ExtractPassword_JSON_BodyRestored(t *testing.T) {
 	}
 }
 
-// Form is preferred when Content-Type is not JSON.
+// When Content-Type is form (not application/json), form extraction is used.
 func TestDefaultHTTPExtractor_ExtractPassword_NoContentType_FormUsed(t *testing.T) {
 	ext := DefaultHTTPExtractor(Config{PasswordField: "password"})
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("password=formval"))
-	// No Content-Type → not application/json, so form is used
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	got, err := ext.ExtractPassword(req)
 	if err != nil {
