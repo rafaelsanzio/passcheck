@@ -50,6 +50,14 @@ type Config struct {
 	// Nil or empty means use only the built-in list (~350 common words).
 	CustomWords []string
 
+	// ContextWords is an optional list of user-specific terms to detect
+	// in passwords (e.g., username, email, company name). Entries are
+	// matched case-insensitively and checked for exact matches, substrings,
+	// and leetspeak variants. Words shorter than 3 characters are ignored.
+	// Email addresses are automatically parsed to extract individual components.
+	// Nil or empty means no context-aware checking is performed.
+	ContextWords []string
+
 	// DisableLeet disables leetspeak normalization during dictionary
 	// checks. When true, substitutions like @ → a, 0 → o, $ → s are
 	// not applied, and only the plain password is checked against
