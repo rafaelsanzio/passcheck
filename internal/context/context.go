@@ -218,5 +218,5 @@ func containsContextWord(pwLower, pwNormalized, word string) bool {
 
 // formatContextMessage creates a human-readable message for a context word match.
 func formatContextMessage(word string) string {
-	return fmt.Sprintf("Contains personal information: %s", word)
+	return fmt.Sprintf("Contains personal information: \"%q\"", word)
 }
