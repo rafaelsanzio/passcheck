@@ -3,6 +3,8 @@ package rules
 import (
 	"strings"
 	"testing"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 )
 
 // ---------------------------------------------------------------------------
@@ -316,8 +318,8 @@ func TestCheckWith_CustomMinLength(t *testing.T) {
 
 	// "abcdefgh" (8 chars) passes with min 6, fails with default 12.
 	issues := CheckWith("abcdefgh", opts)
-	for _, issue := range issues {
-		if containsIssue([]string{issue}, "too short") {
+	for _, iss := range issues {
+		if strings.Contains(strings.ToLower(iss.Message), "too short") {
 			t.Error("8-char password should pass with MinLength=6")
 		}
 	}
@@ -349,12 +351,10 @@ func TestCheckWith_DisableAllCharsets(t *testing.T) {
 	opts.RequireSymbol = false
 
 	issues := CheckWith("abcdefghijkl", opts)
-	// No charset issues — only whitespace/repeat checks remain.
-	for _, issue := range issues {
-		if containsIssue([]string{issue}, "uppercase") ||
-			containsIssue([]string{issue}, "lowercase") ||
-			containsIssue([]string{issue}, "digit") ||
-			containsIssue([]string{issue}, "symbol") {
+	for _, iss := range issues {
+		msg := strings.ToLower(iss.Message)
+		if strings.Contains(msg, "uppercase") || strings.Contains(msg, "lowercase") ||
+			strings.Contains(msg, "digit") || strings.Contains(msg, "symbol") {
 			t.Errorf("no charset issues expected, got: %v", issues)
 		}
 	}
@@ -390,10 +390,10 @@ func TestCheckWith_EquivalentToCheck(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // containsIssue checks if any issue message contains the given substring.
-func containsIssue(issues []string, substr string) bool {
+func containsIssue(issues []issue.Issue, substr string) bool {
 	lower := strings.ToLower(substr)
-	for _, issue := range issues {
-		if strings.Contains(strings.ToLower(issue), lower) {
+	for _, iss := range issues {
+		if strings.Contains(strings.ToLower(iss.Message), lower) {
 			return true
 		}
 	}
@@ -401,7 +401,7 @@ func containsIssue(issues []string, substr string) bool {
 }
 
 // assertContainsIssue fails the test if no issue contains the expected substring.
-func assertContainsIssue(t *testing.T, issues []string, substr string) {
+func assertContainsIssue(t *testing.T, issues []issue.Issue, substr string) {
 	t.Helper()
 	if !containsIssue(issues, substr) {
 		t.Errorf("expected an issue containing %q, got: %v", substr, issues)

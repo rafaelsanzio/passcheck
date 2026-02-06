@@ -1,13 +1,17 @@
 package rules
 
-import "unicode"
+import (
+	"unicode"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // checkWhitespace detects whitespace characters (spaces, tabs, newlines)
 // and control characters in the password.
 //
 // Whitespace and control characters are discouraged because they can cause
 // issues with copy-paste, display, and compatibility across systems.
-func checkWhitespace(password string) []string {
+func checkWhitespace(password string) []issue.Issue {
 	var hasWhitespace, hasControl bool
 
 	for _, r := range password {
@@ -23,12 +27,12 @@ func checkWhitespace(password string) []string {
 		}
 	}
 
-	var issues []string
+	var issues []issue.Issue
 	if hasWhitespace {
-		issues = append(issues, "Remove whitespace characters (spaces, tabs, newlines)")
+		issues = append(issues, issue.New(issue.CodeRuleWhitespace, "Remove whitespace characters (spaces, tabs, newlines)", issue.CategoryRule, issue.SeverityLow))
 	}
 	if hasControl {
-		issues = append(issues, "Remove control characters")
+		issues = append(issues, issue.New(issue.CodeRuleControlChar, "Remove control characters", issue.CategoryRule, issue.SeverityLow))
 	}
 	return issues
 }

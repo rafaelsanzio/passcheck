@@ -14,6 +14,7 @@ package scoring
 
 import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 )
 
@@ -51,17 +52,17 @@ const (
 )
 
 // IssueSet groups detected issues by category so the scorer can apply
-// appropriate penalty weights. Each field holds the issue messages
+// appropriate penalty weights. Each field holds the structured issues
 // produced by its corresponding analysis phase.
 type IssueSet struct {
-	Rules      []string // Phase 1: basic rule violations
-	Patterns   []string // Phase 2: pattern detections
-	Dictionary []string // Phase 3: dictionary matches
+	Rules      []issue.Issue // Phase 1: basic rule violations
+	Patterns   []issue.Issue // Phase 2: pattern detections
+	Dictionary []issue.Issue // Phase 3: dictionary matches
 }
 
 // AllIssues returns a single flat slice of all issues in evaluation order.
-func (s IssueSet) AllIssues() []string {
-	out := make([]string, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary))
+func (s IssueSet) AllIssues() []issue.Issue {
+	out := make([]issue.Issue, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary))
 	out = append(out, s.Rules...)
 	out = append(out, s.Patterns...)
 	out = append(out, s.Dictionary...)

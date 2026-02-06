@@ -1,6 +1,10 @@
 package rules
 
-import "unicode"
+import (
+	"unicode"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // charsetAnalysis holds the results of scanning a password for character types.
 type charsetAnalysis struct {
@@ -36,25 +40,25 @@ func analyzeCharsets(password string) charsetAnalysis {
 //
 // It performs a single pass over the password for efficiency, then reports
 // all missing character sets at once.
-func checkCharsets(password string, opts Options) []string {
+func checkCharsets(password string, opts Options) []issue.Issue {
 	if password == "" {
 		return nil
 	}
 
 	cs := analyzeCharsets(password)
 
-	var issues []string
+	var issues []issue.Issue
 	if opts.RequireUpper && !cs.hasUpper {
-		issues = append(issues, "Add at least one uppercase letter")
+		issues = append(issues, issue.New(issue.CodeRuleNoUpper, "Add at least one uppercase letter", issue.CategoryRule, issue.SeverityLow))
 	}
 	if opts.RequireLower && !cs.hasLower {
-		issues = append(issues, "Add at least one lowercase letter")
+		issues = append(issues, issue.New(issue.CodeRuleNoLower, "Add at least one lowercase letter", issue.CategoryRule, issue.SeverityLow))
 	}
 	if opts.RequireDigit && !cs.hasDigit {
-		issues = append(issues, "Add at least one digit")
+		issues = append(issues, issue.New(issue.CodeRuleNoDigit, "Add at least one digit", issue.CategoryRule, issue.SeverityLow))
 	}
 	if opts.RequireSymbol && !cs.hasSymbol {
-		issues = append(issues, "Add at least one symbol (!@#$%^&*...)")
+		issues = append(issues, issue.New(issue.CodeRuleNoSymbol, "Add at least one symbol (!@#$%^&*...)", issue.CategoryRule, issue.SeverityLow))
 	}
 	return issues
 }

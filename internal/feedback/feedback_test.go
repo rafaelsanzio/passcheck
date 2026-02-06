@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/scoring"
 )
 
@@ -20,57 +21,53 @@ func TestRefine_Empty(t *testing.T) {
 
 func TestRefine_SortsBySeverity(t *testing.T) {
 	issues := scoring.IssueSet{
-		Rules:      []string{"Add at least one uppercase letter"},
-		Patterns:   []string{"Contains sequence: 'abcd'"},
-		Dictionary: []string{"This password appears in common password lists"},
+		Rules:      []issue.Issue{issue.New(issue.CodeRuleNoUpper, "Add at least one uppercase letter", issue.CategoryRule, issue.SeverityLow)},
+		Patterns:   []issue.Issue{issue.New(issue.CodePatternSequence, "Contains sequence: 'abcd'", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonPassword, "This password appears in common password lists", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	result := Refine(issues, 0)
-	// Dictionary (severity 3) should come first, then patterns (2), then rules (1).
 	if len(result) < 3 {
 		t.Fatalf("expected 3 issues, got %d", len(result))
 	}
-	assertContains(t, result[0], "password lists")
-	assertContains(t, result[1], "sequence")
-	assertContains(t, result[2], "uppercase")
+	assertContains(t, result[0].Message, "password lists")
+	assertContains(t, result[1].Message, "sequence")
+	assertContains(t, result[2].Message, "uppercase")
 }
 
 func TestRefine_Dedup(t *testing.T) {
-	// Same quoted word 'sunshine' from two different phases.
 	issues := scoring.IssueSet{
-		Patterns:   []string{"Contains common word with substitution: 'sunshine'"},
-		Dictionary: []string{"Contains common word: 'sunshine'"},
+		Patterns:   []issue.Issue{issue.New(issue.CodePatternSubstitution, "Contains common word with substitution: 'sunshine'", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonWord, "Contains common word: 'sunshine'", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	result := Refine(issues, 0)
-	// Only the dictionary version (higher severity) should survive.
 	if len(result) != 1 {
 		t.Errorf("expected 1 issue after dedup, got %d: %v", len(result), result)
 	}
 	if len(result) > 0 {
-		assertContains(t, result[0], "common word: 'sunshine'")
+		assertContains(t, result[0].Message, "common word: 'sunshine'")
 	}
 }
 
 func TestRefine_DedupKeepsHighestSeverity(t *testing.T) {
 	issues := scoring.IssueSet{
-		Rules:      []string{"Avoid repeating character 'aaa'"},
-		Patterns:   []string{"Contains repeated block: 'aaa'"},
-		Dictionary: []string{"Contains common word: 'aaa'"},
+		Rules:      []issue.Issue{issue.New(issue.CodeRuleRepeatedChars, "Avoid repeating character 'aaa'", issue.CategoryRule, issue.SeverityLow)},
+		Patterns:   []issue.Issue{issue.New(issue.CodePatternBlock, "Contains repeated block: 'aaa'", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonWord, "Contains common word: 'aaa'", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	result := Refine(issues, 0)
-	// All three reference 'aaa'. Dictionary (severity 3) wins.
 	if len(result) != 1 {
 		t.Errorf("expected 1 issue, got %d: %v", len(result), result)
 	}
 	if len(result) > 0 {
-		assertContains(t, result[0], "common word")
+		assertContains(t, result[0].Message, "common word")
 	}
 }
 
 func TestRefine_UnquotedMessagesNeverDeduped(t *testing.T) {
 	issues := scoring.IssueSet{
-		Dictionary: []string{
-			"This password appears in common password lists",
-			"This is a leetspeak variant of a common password",
+		Dictionary: []issue.Issue{
+			issue.New(issue.CodeDictCommonPassword, "This password appears in common password lists", issue.CategoryDictionary, issue.SeverityHigh),
+			issue.New(issue.CodeDictLeetVariant, "This is a leetspeak variant of a common password", issue.CategoryDictionary, issue.SeverityHigh),
 		},
 	}
 	result := Refine(issues, 0)
@@ -81,7 +78,15 @@ func TestRefine_UnquotedMessagesNeverDeduped(t *testing.T) {
 
 func TestRefine_Limit(t *testing.T) {
 	issues := scoring.IssueSet{
-		Rules: []string{"r1", "r2", "r3", "r4", "r5", "r6", "r7"},
+		Rules: []issue.Issue{
+			issue.New(issue.CodeRuleTooShort, "r1", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r2", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r3", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r4", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r5", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r6", issue.CategoryRule, issue.SeverityLow),
+			issue.New(issue.CodeRuleTooShort, "r7", issue.CategoryRule, issue.SeverityLow),
+		},
 	}
 	result := Refine(issues, 3)
 	if len(result) != 3 {
@@ -90,9 +95,11 @@ func TestRefine_Limit(t *testing.T) {
 }
 
 func TestRefine_LimitZeroMeansNoLimit(t *testing.T) {
-	issues := scoring.IssueSet{
-		Rules: []string{"r1", "r2", "r3", "r4", "r5", "r6", "r7"},
+	rules := make([]issue.Issue, 7)
+	for i := range rules {
+		rules[i] = issue.New(issue.CodeRuleTooShort, "r", issue.CategoryRule, issue.SeverityLow)
 	}
+	issues := scoring.IssueSet{Rules: rules}
 	result := Refine(issues, 0)
 	if len(result) != 7 {
 		t.Errorf("expected 7 issues (no limit), got %d", len(result))
@@ -100,10 +107,11 @@ func TestRefine_LimitZeroMeansNoLimit(t *testing.T) {
 }
 
 func TestRefine_DefaultLimit(t *testing.T) {
+	mk := func(code, msg, cat string, sev int) issue.Issue { return issue.New(code, msg, cat, sev) }
 	issues := scoring.IssueSet{
-		Rules:      []string{"r1", "r2", "r3"},
-		Patterns:   []string{"p1", "p2", "p3"},
-		Dictionary: []string{"d1", "d2", "d3"},
+		Rules:      []issue.Issue{mk(issue.CodeRuleTooShort, "r1", issue.CategoryRule, issue.SeverityLow), mk(issue.CodeRuleTooShort, "r2", issue.CategoryRule, issue.SeverityLow), mk(issue.CodeRuleTooShort, "r3", issue.CategoryRule, issue.SeverityLow)},
+		Patterns:   []issue.Issue{mk(issue.CodePatternKeyboard, "p1", issue.CategoryPattern, issue.SeverityMed), mk(issue.CodePatternKeyboard, "p2", issue.CategoryPattern, issue.SeverityMed), mk(issue.CodePatternKeyboard, "p3", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{mk(issue.CodeDictCommonPassword, "d1", issue.CategoryDictionary, issue.SeverityHigh), mk(issue.CodeDictCommonPassword, "d2", issue.CategoryDictionary, issue.SeverityHigh), mk(issue.CodeDictCommonPassword, "d3", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	result := Refine(issues, DefaultMaxIssues)
 	if len(result) > DefaultMaxIssues {
@@ -112,13 +120,11 @@ func TestRefine_DefaultLimit(t *testing.T) {
 }
 
 func TestRefine_DedupThenLimit(t *testing.T) {
-	// 3 messages about 'dragon' from different phases + 2 unique.
 	issues := scoring.IssueSet{
-		Rules:      []string{"Some rule issue"},
-		Patterns:   []string{"Contains common word with substitution: 'dragon'"},
-		Dictionary: []string{"Contains common word: 'dragon'", "Another dict issue"},
+		Rules:      []issue.Issue{issue.New(issue.CodeRuleTooShort, "Some rule issue", issue.CategoryRule, issue.SeverityLow)},
+		Patterns:   []issue.Issue{issue.New(issue.CodePatternSubstitution, "Contains common word with substitution: 'dragon'", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonWord, "Contains common word: 'dragon'", issue.CategoryDictionary, issue.SeverityHigh), issue.New(issue.CodeDictCommonPassword, "Another dict issue", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
-	// After dedup: 3 unique messages (rule, deduped dragon, another dict).
 	result := Refine(issues, 0)
 	if len(result) != 3 {
 		t.Errorf("expected 3 issues after dedup, got %d: %v", len(result), result)
@@ -131,9 +137,9 @@ func TestRefine_DedupThenLimit(t *testing.T) {
 
 func TestDedup_NoDuplicates(t *testing.T) {
 	input := []rankedIssue{
-		{"msg A", severityDict, 0},
-		{"msg B", severityPattern, 1},
-		{"msg C", severityRule, 2},
+		{issue.New(issue.CodeDictCommonPassword, "msg A", issue.CategoryDictionary, issue.SeverityHigh), 0},
+		{issue.New(issue.CodePatternKeyboard, "msg B", issue.CategoryPattern, issue.SeverityMed), 1},
+		{issue.New(issue.CodeRuleTooShort, "msg C", issue.CategoryRule, issue.SeverityLow), 2},
 	}
 	result := dedup(input)
 	if len(result) != 3 {
@@ -143,15 +149,15 @@ func TestDedup_NoDuplicates(t *testing.T) {
 
 func TestDedup_SameToken(t *testing.T) {
 	input := []rankedIssue{
-		{"Contains common word: 'pass'", severityDict, 0},
-		{"Contains common word with substitution: 'pass'", severityPattern, 1},
+		{issue.New(issue.CodeDictCommonWord, "Contains common word: 'pass'", issue.CategoryDictionary, issue.SeverityHigh), 0},
+		{issue.New(issue.CodePatternSubstitution, "Contains common word with substitution: 'pass'", issue.CategoryPattern, issue.SeverityMed), 1},
 	}
 	result := dedup(input)
 	if len(result) != 1 {
 		t.Errorf("expected 1 after dedup, got %d: %v", len(result), result)
 	}
-	if result[0].severity != severityDict {
-		t.Errorf("expected dict severity to win, got %d", result[0].severity)
+	if result[0].issue.Severity != issue.SeverityHigh {
+		t.Errorf("expected dict severity to win, got %d", result[0].issue.Severity)
 	}
 }
 
@@ -161,31 +167,30 @@ func TestDedup_SameToken(t *testing.T) {
 
 func TestSortBySeverity(t *testing.T) {
 	input := []rankedIssue{
-		{"rule", severityRule, 0},
-		{"dict", severityDict, 1},
-		{"pattern", severityPattern, 2},
+		{issue.New(issue.CodeRuleTooShort, "rule", issue.CategoryRule, issue.SeverityLow), 0},
+		{issue.New(issue.CodeDictCommonPassword, "dict", issue.CategoryDictionary, issue.SeverityHigh), 1},
+		{issue.New(issue.CodePatternKeyboard, "pattern", issue.CategoryPattern, issue.SeverityMed), 2},
 	}
 	sortBySeverity(input)
-	if input[0].severity != severityDict {
-		t.Errorf("first should be dict, got severity %d", input[0].severity)
+	if input[0].issue.Severity != issue.SeverityHigh {
+		t.Errorf("first should be dict, got severity %d", input[0].issue.Severity)
 	}
-	if input[1].severity != severityPattern {
-		t.Errorf("second should be pattern, got severity %d", input[1].severity)
+	if input[1].issue.Severity != issue.SeverityMed {
+		t.Errorf("second should be pattern, got severity %d", input[1].issue.Severity)
 	}
-	if input[2].severity != severityRule {
-		t.Errorf("third should be rule, got severity %d", input[2].severity)
+	if input[2].issue.Severity != issue.SeverityLow {
+		t.Errorf("third should be rule, got severity %d", input[2].issue.Severity)
 	}
 }
 
 func TestSortBySeverity_StableTies(t *testing.T) {
 	input := []rankedIssue{
-		{"second dict", severityDict, 1},
-		{"first dict", severityDict, 0},
+		{issue.New(issue.CodeDictCommonPassword, "second dict", issue.CategoryDictionary, issue.SeverityHigh), 1},
+		{issue.New(issue.CodeDictCommonPassword, "first dict", issue.CategoryDictionary, issue.SeverityHigh), 0},
 	}
 	sortBySeverity(input)
-	// Same severity → lower index first.
-	if input[0].message != "first dict" {
-		t.Errorf("expected stable sort, got %q first", input[0].message)
+	if input[0].issue.Message != "first dict" {
+		t.Errorf("expected stable sort, got %q first", input[0].issue.Message)
 	}
 }
 
@@ -251,7 +256,7 @@ func TestGeneratePositive_ShortPassword(t *testing.T) {
 
 func TestGeneratePositive_NoPatternPraise_WhenPatternsExist(t *testing.T) {
 	issues := scoring.IssueSet{
-		Patterns: []string{"keyboard pattern found"},
+		Patterns: []issue.Issue{issue.New(issue.CodePatternKeyboard, "keyboard pattern found", issue.CategoryPattern, issue.SeverityMed)},
 	}
 	msgs := GeneratePositive("qwertyuiop12345!", issues, 80)
 	for _, m := range msgs {
@@ -263,7 +268,7 @@ func TestGeneratePositive_NoPatternPraise_WhenPatternsExist(t *testing.T) {
 
 func TestGeneratePositive_NoDictPraise_WhenDictIssuesExist(t *testing.T) {
 	issues := scoring.IssueSet{
-		Dictionary: []string{"common password"},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonPassword, "common password", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	msgs := GeneratePositive("password12345678", issues, 80)
 	for _, m := range msgs {
@@ -274,9 +279,8 @@ func TestGeneratePositive_NoDictPraise_WhenDictIssuesExist(t *testing.T) {
 }
 
 func TestGeneratePositive_OnlyDeservedPraise(t *testing.T) {
-	// 14-char, 2 charsets, some pattern issues, 50 bits.
 	issues := scoring.IssueSet{
-		Patterns: []string{"sequence found"},
+		Patterns: []issue.Issue{issue.New(issue.CodePatternSequence, "sequence found", issue.CategoryPattern, issue.SeverityMed)},
 	}
 	msgs := GeneratePositive("abcdefABCDEFGH", issues, 50)
 	// Should NOT get: length (<16), entropy (<60), pattern-free.

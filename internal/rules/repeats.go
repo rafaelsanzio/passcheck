@@ -1,6 +1,10 @@
 package rules
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // DefaultMaxRepeats is the maximum number of consecutive identical characters
 // allowed before an issue is reported. A value of 3 means "aaa" is flagged.
@@ -13,14 +17,14 @@ const DefaultMaxRepeats = 3
 //   - "aaa"  → flagged (3 consecutive 'a')
 //   - "aa"   → allowed (only 2)
 //   - "aaab" → flagged (3 consecutive 'a')
-func checkRepeatedChars(password string, opts Options) []string {
+func checkRepeatedChars(password string, opts Options) []issue.Issue {
 	runes := []rune(password)
 	if len(runes) < opts.MaxRepeats {
 		return nil
 	}
 
 	seen := make(map[rune]bool)
-	var issues []string
+	var issues []issue.Issue
 
 	count := 1
 	for i := 1; i < len(runes); i++ {
@@ -33,8 +37,11 @@ func checkRepeatedChars(password string, opts Options) []string {
 		if count >= opts.MaxRepeats && !seen[runes[i]] {
 			seen[runes[i]] = true
 			repeated := string(repeatRune(runes[i], count))
-			issues = append(issues, fmt.Sprintf(
-				"Avoid repeating character '%s'", repeated,
+			issues = append(issues, issue.New(
+				issue.CodeRuleRepeatedChars,
+				fmt.Sprintf("Avoid repeating character '%s'", repeated),
+				issue.CategoryRule,
+				issue.SeverityLow,
 			))
 		}
 	}

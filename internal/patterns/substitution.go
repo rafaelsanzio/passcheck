@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/leet"
 )
 
@@ -40,7 +41,7 @@ var commonWeakWords = []string{
 // in the normalized form.
 //
 // Example: "p@$$w0rd" → "password" → match.
-func checkSubstitution(password string) []string {
+func checkSubstitution(password string) []issue.Issue {
 	normalized := leet.Normalize(password)
 
 	// No substitutions were made — nothing extra to report.
@@ -49,13 +50,16 @@ func checkSubstitution(password string) []string {
 	}
 
 	seen := make(map[string]bool)
-	var issues []string
+	var issues []issue.Issue
 
 	for _, word := range commonWeakWords {
 		if strings.Contains(normalized, word) && !seen[word] {
 			seen[word] = true
-			issues = append(issues, fmt.Sprintf(
-				"Contains common word with substitution: '%s'", word,
+			issues = append(issues, issue.New(
+				issue.CodePatternSubstitution,
+				fmt.Sprintf("Contains common word with substitution: '%s'", word),
+				issue.CategoryPattern,
+				issue.SeverityMed,
 			))
 		}
 	}

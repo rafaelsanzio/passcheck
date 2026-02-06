@@ -8,35 +8,37 @@
 // orchestrates all checkers in order.
 package rules
 
+import "github.com/rafaelsanzio/passcheck/internal/issue"
+
 // checker is a function that examines a password and returns
-// a slice of issue descriptions for any violations found.
-type checker func(password string) []string
+// a slice of structured issues for any violations found.
+type checker func(password string) []issue.Issue
 
 // Check runs all basic rule checks with default options and returns
-// a slice of issue messages for any rules that were violated.
+// a slice of structured issues for any rules that were violated.
 //
 // This is a convenience wrapper around [CheckWith] using [DefaultOptions].
-func Check(password string) []string {
+func Check(password string) []issue.Issue {
 	return CheckWith(password, DefaultOptions())
 }
 
 // CheckWith runs all basic rule checks with custom options and returns
-// a slice of issue messages for any rules that were violated.
+// a slice of structured issues for any rules that were violated.
 //
 // Rules are evaluated in a fixed order:
 //  1. Minimum length
 //  2. Character set requirements (uppercase, lowercase, digits, symbols)
 //  3. Whitespace and control characters
 //  4. Repeated consecutive characters
-func CheckWith(password string, opts Options) []string {
+func CheckWith(password string, opts Options) []issue.Issue {
 	checkers := []checker{
-		func(pw string) []string { return checkMinLength(pw, opts) },
-		func(pw string) []string { return checkCharsets(pw, opts) },
+		func(pw string) []issue.Issue { return checkMinLength(pw, opts) },
+		func(pw string) []issue.Issue { return checkCharsets(pw, opts) },
 		checkWhitespace,
-		func(pw string) []string { return checkRepeatedChars(pw, opts) },
+		func(pw string) []issue.Issue { return checkRepeatedChars(pw, opts) },
 	}
 
-	var issues []string
+	var issues []issue.Issue
 	for _, check := range checkers {
 		issues = append(issues, check(password)...)
 	}

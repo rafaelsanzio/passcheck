@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/leet"
 )
 
@@ -99,11 +100,11 @@ func TestCheckKeyboard_NoDuplicates(t *testing.T) {
 	// the same match twice.
 	issues := checkKeyboard("qwertyuiop", DefaultOptions())
 	seen := make(map[string]bool)
-	for _, issue := range issues {
-		if seen[issue] {
-			t.Errorf("duplicate issue: %s", issue)
+	for _, iss := range issues {
+		if seen[iss.Message] {
+			t.Errorf("duplicate issue: %s", iss.Message)
 		}
-		seen[issue] = true
+		seen[iss.Message] = true
 	}
 }
 
@@ -254,8 +255,8 @@ func TestCheckRepeatedBlocks_NoDuplicates(t *testing.T) {
 	// "abcabcabc" should report "abc" only once.
 	issues := checkRepeatedBlocks("abcabcabc")
 	count := 0
-	for _, issue := range issues {
-		if strings.Contains(issue, "'abc'") {
+	for _, iss := range issues {
+		if strings.Contains(iss.Message, "'abc'") {
 			count++
 		}
 	}
@@ -472,17 +473,17 @@ func TestCheckWith_EquivalentToCheck(t *testing.T) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func containsIssue(issues []string, substr string) bool {
+func containsIssue(issues []issue.Issue, substr string) bool {
 	lower := strings.ToLower(substr)
-	for _, issue := range issues {
-		if strings.Contains(strings.ToLower(issue), lower) {
+	for _, iss := range issues {
+		if strings.Contains(strings.ToLower(iss.Message), lower) {
 			return true
 		}
 	}
 	return false
 }
 
-func assertContainsIssue(t *testing.T, issues []string, substr string) {
+func assertContainsIssue(t *testing.T, issues []issue.Issue, substr string) {
 	t.Helper()
 	if !containsIssue(issues, substr) {
 		t.Errorf("expected an issue containing %q, got: %v", substr, issues)
