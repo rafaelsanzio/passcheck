@@ -7,28 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Expanded dictionary**: common password list grown to 953 unique entries
-  (from ~100), common English word list grown to 492 entries (from ~50).
-- **Custom blocklists**: `Config.CustomPasswords` and `Config.CustomWords`
-  fields allow user-supplied organization-specific password and word lists
-  for dictionary checks.
-- **Dictionary Options API**: `dictionary.Options`, `dictionary.DefaultOptions`,
-  and `dictionary.CheckWith` for fine-grained control over dictionary checks.
-- **List integrity tests**: automated validation for duplicate detection,
-  lowercase enforcement, sort-order verification, and minimum length compliance.
-- **`go generate` validation**: `go generate ./internal/dictionary/...` runs
-  list integrity tests as a pre-commit safeguard.
-- **Makefile target**: `make validate-lists` to run dictionary list validation.
-- **New benchmarks**: `BenchmarkCheckWith_CustomPasswords`,
-  `BenchmarkCheckWith_CustomWords`, `BenchmarkCheckWith_LargeCustomList`.
-- **Leet toggle**: `Config.DisableLeet` / `dictionary.Options.DisableLeet`
-  to disable leetspeak normalization in dictionary checks.
-- **Full API symmetry**: `dictionary` package now follows the same
-  `Check / CheckWith / Options / DefaultOptions` contract as `rules`
-  and `patterns`.
-
 ## [1.0.0] - 2026-02-06
 
 ### Added
@@ -41,8 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Config` struct.
 - **Pattern detection**: keyboard walks (QWERTY/AZERTY/Dvorak), arithmetic
   sequences, repeated substring blocks, leetspeak substitutions.
-- **Dictionary checks**: common password list (~100 entries), common English
-  word detection (~50 entries), leetspeak normalization for dictionary lookups.
+- **Dictionary checks**: common password list (~950 entries), common English
+  word detection (~490 entries), leetspeak normalization for dictionary lookups.
+- **Custom blocklists**: `Config.CustomPasswords` and `Config.CustomWords`
+  fields allow user-supplied organization-specific password and word lists
+  for dictionary checks.
+- **Dictionary Options API**: `dictionary.Options`, `dictionary.DefaultOptions`,
+  and `dictionary.CheckWith` for fine-grained control over dictionary checks.
+- **Leet toggle**: `Config.DisableLeet` / `dictionary.Options.DisableLeet`
+  to disable leetspeak normalization in dictionary checks.
+- **List integrity tests**: automated validation for duplicate detection,
+  lowercase enforcement, sort-order verification, and minimum length compliance.
+- **`go generate` validation**: `go generate ./internal/dictionary/...` runs
+  list integrity tests as a pre-commit safeguard.
+- **Makefile target**: `make validate-lists` to run dictionary list validation.
 - **Entropy calculation**: Shannon entropy based on character-set diversity and
   password length.
 - **Weighted scoring**: base score from entropy, bonuses for length and charset
