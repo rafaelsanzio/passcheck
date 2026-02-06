@@ -39,8 +39,8 @@ func main() {
 
 		if len(result.Issues) > 0 {
 			fmt.Printf("  Issues:\n")
-			for _, issue := range result.Issues {
-				fmt.Printf("    - %s\n", issue)
+			for _, iss := range result.Issues {
+				fmt.Printf("    - %s\n", iss.Message)
 			}
 		}
 

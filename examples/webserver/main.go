@@ -31,11 +31,11 @@ type checkRequest struct {
 }
 
 type checkResponse struct {
-	Score       int      `json:"score"`
-	Verdict     string   `json:"verdict"`
-	Entropy     float64  `json:"entropy"`
-	Issues      []string `json:"issues"`
-	Suggestions []string `json:"suggestions"`
+	Score       int                `json:"score"`
+	Verdict     string             `json:"verdict"`
+	Entropy     float64            `json:"entropy"`
+	Issues      []passcheck.Issue  `json:"issues"`
+	Suggestions []string           `json:"suggestions"`
 }
 
 func main() {
