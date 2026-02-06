@@ -14,6 +14,7 @@ const (
 	CategoryRule       = "rule"
 	CategoryPattern    = "pattern"
 	CategoryDictionary = "dictionary"
+	CategoryContext    = "context"
 )
 
 // Issue codes — stable identifiers for programmatic handling.
@@ -39,6 +40,9 @@ const (
 	CodeDictLeetVariant    = "DICT_LEET_VARIANT"
 	CodeDictCommonWord     = "DICT_COMMON_WORD"
 	CodeDictCommonWordSub  = "DICT_COMMON_WORD_SUB"
+
+	// Context
+	CodeContextWord = "CONTEXT_WORD"
 )
 
 // Issue represents a single finding from a password check.

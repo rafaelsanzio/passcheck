@@ -39,6 +39,7 @@ package passcheck
 import (
 	"strings"
 
+	"github.com/rafaelsanzio/passcheck/internal/context"
 	"github.com/rafaelsanzio/passcheck/internal/dictionary"
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
@@ -182,11 +183,16 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		DisableLeet:     cfg.DisableLeet,
 	}
 
+	contextOpts := context.Options{
+		ContextWords: cfg.ContextWords,
+	}
+
 	// Collect issues by category for weighted scoring.
 	issueSet := scoring.IssueSet{
 		Rules:      rules.CheckWith(pw, rulesOpts),
 		Patterns:   patterns.CheckWith(pw, patternsOpts),
 		Dictionary: dictionary.CheckWith(pw, dictOpts),
+		Context:    context.CheckWith(pw, contextOpts),
 	}
 
 	// Entropy calculation

@@ -23,6 +23,7 @@ const (
 	PenaltyPerRule      = 5  // missing charset, length, whitespace, repeats
 	PenaltyPerPattern   = 10 // keyboard walk, sequence, block, substitution
 	PenaltyPerDictMatch = 15 // common password, common word, leet variant
+	PenaltyPerContext   = 20 // personal information (username, email, company)
 )
 
 // Bonus parameters.
@@ -58,14 +59,16 @@ type IssueSet struct {
 	Rules      []issue.Issue // Phase 1: basic rule violations
 	Patterns   []issue.Issue // Phase 2: pattern detections
 	Dictionary []issue.Issue // Phase 3: dictionary matches
+	Context    []issue.Issue // Phase 4: context-aware detections
 }
 
 // AllIssues returns a single flat slice of all issues in evaluation order.
 func (s IssueSet) AllIssues() []issue.Issue {
-	out := make([]issue.Issue, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary))
+	out := make([]issue.Issue, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary)+len(s.Context))
 	out = append(out, s.Rules...)
 	out = append(out, s.Patterns...)
 	out = append(out, s.Dictionary...)
+	out = append(out, s.Context...)
 	return out
 }
 
@@ -93,7 +96,8 @@ func CalculateWith(entropyBits float64, password string, issues IssueSet, minLen
 	// --- Penalties ---
 	penalty := len(issues.Rules)*PenaltyPerRule +
 		len(issues.Patterns)*PenaltyPerPattern +
-		len(issues.Dictionary)*PenaltyPerDictMatch
+		len(issues.Dictionary)*PenaltyPerDictMatch +
+		len(issues.Context)*PenaltyPerContext
 
 	score := int(base) + bonus - penalty
 
