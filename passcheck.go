@@ -9,7 +9,7 @@
 //	res := passcheck.Check("P@ssw0rd123")
 //	fmt.Println(res.Score)       // 42
 //	fmt.Println(res.Verdict)     // "Weak"
-//	fmt.Println(res.Issues)      // ["Contains common word", ...]
+//	for _, iss := range res.Issues { fmt.Println(iss.Message) }
 //	fmt.Println(res.Suggestions) // ["Good length (16 characters)", ...]
 //
 // # Custom Configuration
@@ -88,7 +88,7 @@ const (
 type Issue struct {
 	Code     string `json:"code"`     // Stable identifier (e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD")
 	Message  string `json:"message"` // Human-readable description
-	Category string `json:"category"` // "rule", "pattern", "dictionary"
+	Category string `json:"category"` // "rule", "pattern", "dictionary", "context"
 	Severity int    `json:"severity"` // 1 (low) – 3 (high)
 }
 

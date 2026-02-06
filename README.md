@@ -15,15 +15,21 @@ result with a score, verdict, and specific feedback.
 ## Features
 
 - **Score & Verdict** — 0-100 score mapped to human-readable strength labels
+- **Structured Issues** — Typed `Issue` (Code, Message, Category, Severity) for programmatic handling
 - **Pattern Detection** — Keyboard walks, sequences, repeated blocks, leetspeak
 - **Dictionary Checks** — ~950 common passwords, ~490 common words, leet variants
+- **Context-Aware Detection** — Reject passwords containing username, email, or custom words
+- **Policy Presets** — NIST, PCI-DSS, OWASP, Enterprise, UserFriendly in one call
 - **Custom Blocklists** — Add organization-specific passwords and words via config
+- **HTTP Middleware** — Drop-in middleware for net/http (Chi, Echo, Gin, Fiber with optional build tags)
 - **Entropy Calculation** — Shannon entropy based on character-set diversity
 - **Configurable Rules** — Adjust minimum length, character requirements, thresholds
 - **Actionable Feedback** — Prioritized issues and positive suggestions
 - **Secure Memory** — `CheckBytes` zeros input after analysis
 - **CLI Tool** — Colored output, JSON mode, verbose mode
 - **Zero Dependencies** — Only the Go standard library
+
+For upgrade instructions from v1.0.0 (e.g. `Result.Issues` type change, new presets and middleware), see [MIGRATION.md](MIGRATION.md).
 
 ## Installation
 
@@ -65,8 +71,8 @@ func main() {
     fmt.Printf("Verdict: %s\n", result.Verdict)
     fmt.Printf("Entropy: %.1f bits\n", result.Entropy)
 
-    for _, issue := range result.Issues {
-        fmt.Printf("  - %s\n", issue)
+    for _, iss := range result.Issues {
+        fmt.Printf("  - %s\n", iss.Message)
     }
     for _, s := range result.Suggestions {
         fmt.Printf("  + %s\n", s)
@@ -151,11 +157,20 @@ func CheckBytesWithConfig(password []byte, cfg Config) (Result, error)
 type Result struct {
     Score       int      // 0 (weakest) to 100 (strongest)
     Verdict     string   // "Very Weak", "Weak", "Okay", "Strong", "Very Strong"
-    Issues      []string // Prioritized, deduplicated problems
+    Issues      []Issue  // Prioritized, deduplicated problems (Code, Message, Category, Severity)
     Suggestions []string // Positive feedback about strengths
     Entropy     float64  // Estimated entropy in bits
 }
+
+type Issue struct {
+    Code     string // e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD"
+    Message  string // Human-readable description
+    Category string // "rule", "pattern", "dictionary", "context"
+    Severity int    // 1 (low) – 3 (high)
+}
 ```
+
+Use `result.IssueMessages()` for a `[]string` of messages only (backward compatibility).
 
 ### Verdicts
 
@@ -199,6 +214,7 @@ if err != nil {
 | `MaxIssues`        | `int`  | 5       | Max issues returned (0 = no limit)         |
 | `CustomPasswords`  | `[]string` | nil | Additional passwords to block (case-insensitive) |
 | `CustomWords`      | `[]string` | nil | Additional words to detect as substrings   |
+| `ContextWords`     | `[]string` | nil | User-specific terms (username, email, etc.) to reject in passwords |
 | `DisableLeet`      | `bool` | false   | Disable leetspeak normalization in dictionary checks |
 
 ### Custom Blocklists
@@ -213,6 +229,20 @@ cfg.CustomWords = []string{"acmecorp", "projectx"}
 result, _ := passcheck.CheckWithConfig("iloveacmecorp99!", cfg)
 // "acmecorp" will be detected as a common word
 ```
+
+### Context-Aware Detection
+
+Reject passwords that contain user-specific or organization-specific terms (e.g. username, email, company name). Set `Config.ContextWords`; matching is case-insensitive and supports substrings and leetspeak variants. Email addresses are parsed into local and domain parts.
+
+```go
+cfg := passcheck.DefaultConfig()
+cfg.ContextWords = []string{"john", "john.doe@acme.com", "acmecorp"}
+
+result, _ := passcheck.CheckWithConfig("MySecret2024", cfg)  // OK
+result, _ := passcheck.CheckWithConfig("John123!", cfg)      // issue: contains "john"
+```
+
+Words shorter than 3 characters are ignored. Use with registration or password-change flows to prevent passwords derived from personal data.
 
 ### Disabling Leet Normalization
 
@@ -257,6 +287,22 @@ Each preset is documented in godoc with standard references (NIST SP 800-63B, PC
 
 You can still override after calling a preset, e.g. `cfg := passcheck.NISTConfig(); cfg.CustomPasswords = myList`.
 
+### HTTP Middleware
+
+Protect registration or password-change endpoints with the [middleware](middleware/) package. Zero extra dependencies for net/http:
+
+```go
+import "github.com/rafaelsanzio/passcheck/middleware"
+
+mux := http.NewServeMux()
+mux.Handle("/register", middleware.HTTP(middleware.Config{
+    MinScore:      60,
+    PasswordField: "password",
+}, registerHandler))
+```
+
+The middleware extracts the password from JSON or form body, runs passcheck, and returns 400 with score and issues when the password is too weak. Optional adapters for Chi, Echo, Gin, and Fiber (build tags). See [examples/middleware](examples/middleware/) and the [middleware package](middleware/) docs.
+
 ### Validation
 
 `Config.Validate()` checks for invalid values:
@@ -300,6 +346,7 @@ passcheck/
 ├── passcheck.go        # Public API: Check, CheckWithConfig, CheckBytes
 ├── config.go           # Config struct, DefaultConfig, Validate
 ├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
+├── middleware/         # HTTP middleware (net/http, Chi, Echo, Gin, Fiber)
 ├── internal/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats
 │   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution
