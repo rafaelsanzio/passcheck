@@ -225,6 +225,38 @@ cfg.DisableLeet = true
 // "@dm1n" will NOT be flagged as a variant of "admin"
 ```
 
+### Policy Presets
+
+Use standard-based presets instead of building config from scratch:
+
+| Preset | Use case | Min length | Complexity |
+|--------|----------|------------|------------|
+| `NISTConfig()` | NIST SP 800-63B (length over composition) | 8 | None |
+| `UserFriendlyConfig()` | Consumer apps, low friction | 10 | Lower + digit |
+| `OWASPConfig()` | Web apps, SaaS (OWASP recommendations) | 10 | Upper + lower + digit |
+| `PCIDSSConfig()` | PCI-DSS v4.0 (payment card systems) | 12 | Full |
+| `EnterpriseConfig()` | High-security / enterprise | 14 | Full, strict |
+
+```go
+// NIST: length and dictionary only, no composition rules
+cfg := passcheck.NISTConfig()
+result, _ := passcheck.CheckWithConfig("correct-horse-battery-staple", cfg)
+
+// PCI-DSS: strict complexity for payment systems
+cfg := passcheck.PCIDSSConfig()
+result, _ := passcheck.CheckWithConfig("MyC0mpl3x!P@ss2024", cfg)
+```
+
+Each preset is documented in godoc with standard references (NIST SP 800-63B, PCI-DSS 8.3.6, OWASP Authentication Cheat Sheet). See [presets.go](presets.go).
+
+**Migrating from DefaultConfig():** If you currently use `DefaultConfig()` and override a few fields, you can often replace that with a preset and then tweak:
+
+- Need shorter passwords and no composition rules? Use `NISTConfig()`.
+- Need same strictness as today? `DefaultConfig()` is already close to `PCIDSSConfig()` (both min 12, full complexity). Switch to `passcheck.PCIDSSConfig()` for a named, standard-based config.
+- Need slightly looser for better UX? Use `OWASPConfig()` (symbols optional) or `UserFriendlyConfig()` (min 10, fewer requirements).
+
+You can still override after calling a preset, e.g. `cfg := passcheck.NISTConfig(); cfg.CustomPasswords = myList`.
+
 ### Validation
 
 `Config.Validate()` checks for invalid values:
@@ -267,6 +299,7 @@ truncated.
 passcheck/
 ├── passcheck.go        # Public API: Check, CheckWithConfig, CheckBytes
 ├── config.go           # Config struct, DefaultConfig, Validate
+├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
 ├── internal/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats
 │   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution
