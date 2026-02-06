@@ -168,8 +168,8 @@ func EnterpriseConfig() Config {
 		RequireLower:     true,
 		RequireDigit:     true,
 		RequireSymbol:    true,
-		MaxRepeats:       2, // Stricter than default
-		PatternMinLength: 3, // More aggressive pattern detection
+		MaxRepeats:       2,  // Stricter than default
+		PatternMinLength: 3,  // More aggressive pattern detection
 		MaxIssues:        10, // Show more issues for comprehensive feedback
 		DisableLeet:      false,
 	}
@@ -214,9 +214,9 @@ func UserFriendlyConfig() Config {
 		RequireLower:     true,  // At least lowercase
 		RequireDigit:     true,  // At least digits
 		RequireSymbol:    false,
-		MaxRepeats:       4,     // More lenient
-		PatternMinLength: 5,     // Less aggressive pattern detection
-		MaxIssues:        3,     // Fewer issues shown
+		MaxRepeats:       4, // More lenient
+		PatternMinLength: 5, // Less aggressive pattern detection
+		MaxIssues:        3, // Fewer issues shown
 		DisableLeet:      false,
 	}
 }
