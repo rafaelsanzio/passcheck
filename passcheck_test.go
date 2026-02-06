@@ -59,9 +59,9 @@ func TestCheck_IssuesNotEmpty(t *testing.T) {
 	// A strong password should have no issues.
 	result := Check("Xk9$mP2!vR7@nL4&wQ")
 
-	for _, issue := range result.Issues {
-		if issue == "" {
-			t.Error("issue should not be empty string")
+	for _, iss := range result.Issues {
+		if iss.Message == "" {
+			t.Error("issue message should not be empty")
 		}
 	}
 }
@@ -137,8 +137,8 @@ func TestCheck_IssuesSortedBySeverity(t *testing.T) {
 	}
 	// First issue should come from dictionary phase (most critical).
 	first := result.Issues[0]
-	if first == "" {
-		t.Error("first issue should not be empty")
+	if first.Message == "" {
+		t.Error("first issue message should not be empty")
 	}
 }
 
@@ -363,17 +363,17 @@ func TestCheckWithConfig_CustomMinLength(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "too short") {
-			t.Errorf("6-char password should pass with MinLength=6, got issue: %s", issue)
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "too short") {
+			t.Errorf("6-char password should pass with MinLength=6, got issue: %s", iss.Message)
 		}
 	}
 
 	// Same password fails with default config.
 	resultDef := Check("aB3!xY")
 	found := false
-	for _, issue := range resultDef.Issues {
-		if strings.Contains(strings.ToLower(issue), "too short") {
+	for _, iss := range resultDef.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "too short") {
 			found = true
 		}
 	}
@@ -390,9 +390,9 @@ func TestCheckWithConfig_NoSymbolRequired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "symbol") {
-			t.Errorf("should not require symbol: %s", issue)
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "symbol") {
+			t.Errorf("should not require symbol: %s", iss.Message)
 		}
 	}
 }
@@ -422,8 +422,8 @@ func TestCheckWithConfig_StricterPatterns(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	found := false
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "keyboard") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "keyboard") {
 			found = true
 		}
 	}
@@ -479,8 +479,8 @@ func TestCheckWithConfig_CustomPasswords(t *testing.T) {
 
 	// Should flag the custom password as a common password.
 	found := false
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "common password") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "common password") {
 			found = true
 			break
 		}
@@ -502,8 +502,8 @@ func TestCheckWithConfig_CustomPasswords_CaseInsensitive(t *testing.T) {
 	}
 
 	found := false
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "common password") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "common password") {
 			found = true
 			break
 		}
@@ -524,8 +524,8 @@ func TestCheckWithConfig_CustomWords(t *testing.T) {
 	}
 
 	found := false
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "acmecorp") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "acmecorp") {
 			found = true
 			break
 		}
@@ -564,8 +564,8 @@ func TestCheckWithConfig_DisableLeet(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "leetspeak") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "leetspeak") {
 			t.Errorf("expected no leet detection with DisableLeet=true, got: %v", result.Issues)
 			break
 		}
@@ -583,8 +583,8 @@ func TestCheckWithConfig_DisableLeet_PlainStillWorks(t *testing.T) {
 	}
 
 	found := false
-	for _, issue := range result.Issues {
-		if strings.Contains(strings.ToLower(issue), "common password") {
+	for _, iss := range result.Issues {
+		if strings.Contains(strings.ToLower(iss.Message), "common password") {
 			found = true
 			break
 		}
@@ -662,9 +662,9 @@ func FuzzCheck(f *testing.F) {
 		if result.Entropy < 0 {
 			t.Errorf("negative entropy %.2f for input %q", result.Entropy, password)
 		}
-		for i, issue := range result.Issues {
-			if issue == "" {
-				t.Errorf("empty issue at index %d for input %q", i, password)
+		for i, iss := range result.Issues {
+			if iss.Message == "" {
+				t.Errorf("empty issue message at index %d for input %q", i, password)
 			}
 		}
 		for i, s := range result.Suggestions {
