@@ -1,6 +1,10 @@
 package scoring
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // ---------------------------------------------------------------------------
 // Calculate
@@ -33,7 +37,7 @@ func TestCalculate_HighEntropy_Capped(t *testing.T) {
 func TestCalculate_RulesPenalty(t *testing.T) {
 	// 64 bits → base 50, 2 rule issues → -10.
 	// Password "ab" → length bonus 0, charset bonus 0 (1 set).
-	issues := IssueSet{Rules: []string{"too short", "no upper"}}
+	issues := IssueSet{Rules: make([]issue.Issue, 2)}
 	score := Calculate(64, "ab", issues)
 	// 50 + 0 + 0 - 10 = 40
 	if score != 40 {
@@ -44,7 +48,7 @@ func TestCalculate_RulesPenalty(t *testing.T) {
 func TestCalculate_PatternsPenalty(t *testing.T) {
 	// 64 bits → base 50, 1 pattern issue → -10.
 	// Password "abcdefghijklmnop" → length bonus (16-12)×2=8, charset bonus 0 (1 set).
-	issues := IssueSet{Patterns: []string{"keyboard pattern"}}
+	issues := IssueSet{Patterns: make([]issue.Issue, 1)}
 	score := Calculate(64, "abcdefghijklmnop", issues)
 	// 50 + 8 + 0 - 10 = 48
 	if score != 48 {
@@ -55,7 +59,7 @@ func TestCalculate_PatternsPenalty(t *testing.T) {
 func TestCalculate_DictionaryPenalty(t *testing.T) {
 	// 64 bits → base 50, 1 dict issue → -15.
 	// Password "ab" → no bonuses.
-	issues := IssueSet{Dictionary: []string{"common password"}}
+	issues := IssueSet{Dictionary: make([]issue.Issue, 1)}
 	score := Calculate(64, "ab", issues)
 	// 50 + 0 + 0 - 15 = 35
 	if score != 35 {
@@ -68,9 +72,9 @@ func TestCalculate_MixedPenalties(t *testing.T) {
 	// Password "ab" → no bonuses.
 	// 2 rules (-10) + 1 pattern (-10) + 1 dict (-15) = -35.
 	issues := IssueSet{
-		Rules:      []string{"r1", "r2"},
-		Patterns:   []string{"p1"},
-		Dictionary: []string{"d1"},
+		Rules:      make([]issue.Issue, 2),
+		Patterns:   make([]issue.Issue, 1),
+		Dictionary: make([]issue.Issue, 1),
 	}
 	score := Calculate(80, "ab", issues)
 	// 62 + 0 + 0 - 35 = 27
@@ -81,9 +85,9 @@ func TestCalculate_MixedPenalties(t *testing.T) {
 
 func TestCalculate_NeverBelowZero(t *testing.T) {
 	issues := IssueSet{
-		Rules:      make([]string, 10),
-		Patterns:   make([]string, 10),
-		Dictionary: make([]string, 10),
+		Rules:      make([]issue.Issue, 10),
+		Patterns:   make([]issue.Issue, 10),
+		Dictionary: make([]issue.Issue, 10),
 	}
 	score := Calculate(10, "", issues)
 	if score != 0 {
@@ -226,19 +230,18 @@ func TestVerdict(t *testing.T) {
 
 func TestIssueSet_AllIssues(t *testing.T) {
 	is := IssueSet{
-		Rules:      []string{"r1", "r2"},
-		Patterns:   []string{"p1"},
-		Dictionary: []string{"d1", "d2"},
+		Rules:      []issue.Issue{issue.New(issue.CodeRuleTooShort, "r1", issue.CategoryRule, issue.SeverityLow), issue.New(issue.CodeRuleTooShort, "r2", issue.CategoryRule, issue.SeverityLow)},
+		Patterns:   []issue.Issue{issue.New(issue.CodePatternKeyboard, "p1", issue.CategoryPattern, issue.SeverityMed)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonPassword, "d1", issue.CategoryDictionary, issue.SeverityHigh), issue.New(issue.CodeDictCommonPassword, "d2", issue.CategoryDictionary, issue.SeverityHigh)},
 	}
 	all := is.AllIssues()
 	if len(all) != 5 {
 		t.Errorf("expected 5 issues, got %d", len(all))
 	}
-	// Verify order: rules first, then patterns, then dictionary.
 	expected := []string{"r1", "r2", "p1", "d1", "d2"}
 	for i, want := range expected {
-		if all[i] != want {
-			t.Errorf("AllIssues()[%d] = %q, want %q", i, all[i], want)
+		if all[i].Message != want {
+			t.Errorf("AllIssues()[%d].Message = %q, want %q", i, all[i].Message, want)
 		}
 	}
 }
@@ -288,7 +291,7 @@ func TestCalculateWith_CustomMinLength(t *testing.T) {
 
 func TestCalculateWith_DefaultMatchesCalculate(t *testing.T) {
 	pw := "aB3!aB3!aB3!aB3!"
-	issues := IssueSet{Rules: []string{"r1"}}
+	issues := IssueSet{Rules: make([]issue.Issue, 1)}
 
 	got := CalculateWith(64, pw, issues, DefaultMinLength)
 	want := Calculate(64, pw, issues)
@@ -318,8 +321,8 @@ func TestScoring_WeakPassword(t *testing.T) {
 	// "password" → entropy ~37, base ~29. Short + missing charsets = 4 rule issues.
 	// Dictionary match = 1 or more.
 	issues := IssueSet{
-		Rules:      []string{"too short", "no upper", "no digit", "no symbol"},
-		Dictionary: []string{"common password"},
+		Rules:      make([]issue.Issue, 4),
+		Dictionary: make([]issue.Issue, 1),
 	}
 	score := Calculate(37.6, "password", issues)
 	if score > ThresholdWeak {
@@ -340,7 +343,7 @@ func TestScoring_ModeratePassword(t *testing.T) {
 	// "MyPassw0rd12" → entropy ~78, base ~60. 12 chars (no length bonus).
 	// 4 charsets → +9. Contains "password" word → 1 dict issue (-15).
 	issues := IssueSet{
-		Dictionary: []string{"contains common word"},
+		Dictionary: make([]issue.Issue, 1),
 	}
 	score := Calculate(78, "MyPassw0rd12", issues)
 	// 60 + 0 + 9 - 15 = 54 → Okay range

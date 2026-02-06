@@ -157,12 +157,12 @@ func printResult(w io.Writer, r passcheck.Result, opts options, useColor bool) {
 		} else {
 			fmt.Fprintln(w, "\nIssues:")
 		}
-		for _, issue := range r.Issues {
+		for _, iss := range r.Issues {
 			marker := "  - "
 			if useColor {
 				marker = "  " + colorize("-", ansiRed) + " "
 			}
-			fmt.Fprintf(w, "%s%s\n", marker, issue)
+			fmt.Fprintf(w, "%s%s\n", marker, iss.Message)
 		}
 	}
 

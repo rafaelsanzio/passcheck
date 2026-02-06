@@ -1,6 +1,10 @@
 package patterns
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // DefaultSequenceMinLen is the minimum number of characters in an arithmetic
 // progression that trigger a detection.
@@ -17,21 +21,24 @@ var sequenceSteps = []int{1, -1, 2, -2}
 // A sequence is a run where each character's Unicode code point differs
 // from its predecessor by a constant step. Both ascending and descending
 // progressions with steps of 1 and 2 are detected.
-func checkSequence(password string, opts Options) []string {
+func checkSequence(password string, opts Options) []issue.Issue {
 	runes := []rune(password)
 	if len(runes) < opts.SequenceMinLen {
 		return nil
 	}
 
 	seen := make(map[string]bool)
-	var issues []string
+	var issues []issue.Issue
 
 	for _, step := range sequenceSteps {
 		for _, run := range findArithmeticRuns(runes, step, opts.SequenceMinLen) {
 			if !seen[run] {
 				seen[run] = true
-				issues = append(issues, fmt.Sprintf(
-					"Contains sequence: '%s'", run,
+				issues = append(issues, issue.New(
+					issue.CodePatternSequence,
+					fmt.Sprintf("Contains sequence: '%s'", run),
+					issue.CategoryPattern,
+					issue.SeverityMed,
 				))
 			}
 		}

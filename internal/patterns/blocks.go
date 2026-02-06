@@ -1,6 +1,10 @@
 package patterns
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // DefaultBlockMinLen is the minimum length of a repeating unit (block)
 // that triggers detection. Set to 2 so that patterns like "1212" and
@@ -23,7 +27,7 @@ const maxBlockIssues = 5
 // Blocks whose characters are all identical (e.g. "aa" in "aaaa") are
 // skipped because single-character repetition is handled by the rules
 // package.
-func checkRepeatedBlocks(password string) []string {
+func checkRepeatedBlocks(password string) []issue.Issue {
 	runes := []rune(password)
 	n := len(runes)
 
@@ -38,7 +42,7 @@ func checkRepeatedBlocks(password string) []string {
 	}
 
 	seen := make(map[string]bool)
-	var issues []string
+	var issues []issue.Issue
 
 	for blockLen := DefaultBlockMinLen; blockLen <= limit; blockLen++ {
 		for start := 0; start+blockLen*2 <= n; start++ {
@@ -52,8 +56,11 @@ func checkRepeatedBlocks(password string) []string {
 			next := string(runes[start+blockLen : start+blockLen*2])
 			if block == next && !seen[block] {
 				seen[block] = true
-				issues = append(issues, fmt.Sprintf(
-					"Contains repeated block: '%s'", block,
+				issues = append(issues, issue.New(
+					issue.CodePatternBlock,
+					fmt.Sprintf("Contains repeated block: '%s'", block),
+					issue.CategoryPattern,
+					issue.SeverityMed,
 				))
 				if len(issues) >= maxBlockIssues {
 					return issues

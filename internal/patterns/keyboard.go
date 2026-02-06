@@ -1,6 +1,10 @@
 package patterns
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+)
 
 // DefaultKeyboardMinLen is the minimum number of consecutive keyboard-adjacent
 // characters that trigger a detection.
@@ -70,13 +74,13 @@ func init() {
 // least opts.KeyboardMinLen characters are reported. After a match the
 // scanner skips past it so that overlapping sub-patterns (e.g. "werty"
 // inside "qwerty") are not reported separately.
-func checkKeyboard(password string, opts Options) []string {
+func checkKeyboard(password string, opts Options) []issue.Issue {
 	if len(password) < opts.KeyboardMinLen {
 		return nil
 	}
 
 	seen := make(map[string]bool)
-	var issues []string
+	var issues []issue.Issue
 
 	i := 0
 	for i <= len(password)-opts.KeyboardMinLen {
@@ -84,8 +88,11 @@ func checkKeyboard(password string, opts Options) []string {
 		if len(match) >= opts.KeyboardMinLen {
 			if !seen[match] {
 				seen[match] = true
-				issues = append(issues, fmt.Sprintf(
-					"Contains keyboard pattern: '%s'", match,
+				issues = append(issues, issue.New(
+					issue.CodePatternKeyboard,
+					fmt.Sprintf("Contains keyboard pattern: '%s'", match),
+					issue.CategoryPattern,
+					issue.SeverityMed,
 				))
 			}
 			i += len(match) // Skip past the matched region.

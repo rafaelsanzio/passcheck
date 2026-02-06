@@ -62,6 +62,35 @@ const (
 	VerdictVeryStrong = "Very Strong"
 )
 
+// Issue codes — stable identifiers for programmatic handling.
+// Consumers can switch on Code to react differently (e.g. "RULE_TOO_SHORT" vs "DICT_COMMON_PASSWORD").
+const (
+	CodeRuleTooShort        = "RULE_TOO_SHORT"
+	CodeRuleNoUpper         = "RULE_NO_UPPER"
+	CodeRuleNoLower         = "RULE_NO_LOWER"
+	CodeRuleNoDigit         = "RULE_NO_DIGIT"
+	CodeRuleNoSymbol        = "RULE_NO_SYMBOL"
+	CodeRuleWhitespace      = "RULE_WHITESPACE"
+	CodeRuleControlChar     = "RULE_CONTROL_CHAR"
+	CodeRuleRepeatedChars   = "RULE_REPEATED_CHARS"
+	CodePatternKeyboard     = "PATTERN_KEYBOARD"
+	CodePatternSequence     = "PATTERN_SEQUENCE"
+	CodePatternBlock        = "PATTERN_BLOCK"
+	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
+	CodeDictCommonPassword  = "DICT_COMMON_PASSWORD"
+	CodeDictLeetVariant     = "DICT_LEET_VARIANT"
+	CodeDictCommonWord      = "DICT_COMMON_WORD"
+	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
+)
+
+// Issue represents a single finding from a password check.
+type Issue struct {
+	Code     string `json:"code"`     // Stable identifier (e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD")
+	Message  string `json:"message"`  // Human-readable description
+	Category string `json:"category"` // "rule", "pattern", "dictionary"
+	Severity int    `json:"severity"` // 1 (low) – 3 (high)
+}
+
 // Result holds the outcome of a password strength check.
 type Result struct {
 	// Score is the overall password strength score from 0 (weakest) to 100 (strongest).
@@ -71,9 +100,10 @@ type Result struct {
 	// One of: "Very Weak", "Weak", "Okay", "Strong", "Very Strong".
 	Verdict string `json:"verdict"`
 
-	// Issues is a deduplicated, priority-sorted list of problems found
-	// with the password. Limited to the most critical items for clarity.
-	Issues []string `json:"issues"`
+	// Issues is a deduplicated, priority-sorted list of structured problems
+	// found with the password. Use [Result.IssueMessages] for a []string of
+	// messages only (backward compatibility).
+	Issues []Issue `json:"issues"`
 
 	// Suggestions contains positive feedback about the password's
 	// strengths (e.g. "Good length", "No common patterns detected").
@@ -82,6 +112,19 @@ type Result struct {
 
 	// Entropy is the estimated entropy of the password in bits.
 	Entropy float64 `json:"entropy"`
+}
+
+// IssueMessages returns the human-readable message for each issue, in order.
+// Use this when migrating from the previous Result.Issues []string API.
+func (r Result) IssueMessages() []string {
+	if len(r.Issues) == 0 {
+		return nil
+	}
+	out := make([]string, len(r.Issues))
+	for i, iss := range r.Issues {
+		out[i] = iss.Message
+	}
+	return out
 }
 
 // Check evaluates the strength of a password using the default
@@ -161,9 +204,10 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	// Positive feedback for the password's strengths.
 	suggestions := feedback.GeneratePositive(pw, issueSet, e)
 
-	// Guarantee non-nil slices so JSON encodes as [] not null.
-	if refined == nil {
-		refined = []string{}
+	// Convert internal issues to public Issue type.
+	issues := make([]Issue, len(refined))
+	for i, iss := range refined {
+		issues[i] = Issue{Code: iss.Code, Message: iss.Message, Category: iss.Category, Severity: iss.Severity}
 	}
 	if suggestions == nil {
 		suggestions = []string{}
@@ -172,7 +216,7 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	return Result{
 		Score:       score,
 		Verdict:     verdict,
-		Issues:      refined,
+		Issues:      issues,
 		Suggestions: suggestions,
 		Entropy:     e,
 	}, nil

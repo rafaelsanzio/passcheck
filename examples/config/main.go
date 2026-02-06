@@ -74,8 +74,8 @@ func printResult(password string, cfg passcheck.Config) {
 
 	if len(result.Issues) > 0 {
 		fmt.Printf("  Issues (%d):\n", len(result.Issues))
-		for _, issue := range result.Issues {
-			fmt.Printf("    - %s\n", issue)
+		for _, iss := range result.Issues {
+			fmt.Printf("    - %s\n", iss.Message)
 		}
 	}
 
