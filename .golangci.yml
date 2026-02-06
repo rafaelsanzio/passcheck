@@ -1,0 +1,94 @@
+# golangci-lint configuration for passcheck.
+# See https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    # Default linters (always on).
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Style & correctness.
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - unparam
+    - gocritic
+    - revive
+
+    # Bug detection.
+    - bodyclose
+    - durationcheck
+    - nilerr
+    - reassign
+    - wastedassign
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment # not a bug, just a suggestion
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - ifElseChain # we prefer switch; not always applicable
+      - hugeParam   # internal structs are small
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: unused-parameter
+        disabled: true # too noisy for checker callbacks
+
+  misspell:
+    locale: US
+
+issues:
+  # Don't limit the number of issues per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Test files can use dot-imports and skip error checks.
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gocritic
+        - revive
+
+    # Example programs are allowed to ignore errors for brevity.
+    - path: examples/
+      linters:
+        - errcheck
+
+    # main() doesn't need a doc comment.
+    - path: main\.go
+      linters:
+        - revive
+      text: "exported: exported function"

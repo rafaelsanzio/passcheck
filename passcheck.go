@@ -1,0 +1,228 @@
+// Package passcheck provides password strength checking and validation.
+//
+// It evaluates passwords against multiple criteria including basic rules,
+// pattern detection, dictionary checks, and entropy calculation, returning
+// a comprehensive result with a score, verdict, and actionable feedback.
+//
+// # Usage
+//
+//	res := passcheck.Check("P@ssw0rd123")
+//	fmt.Println(res.Score)       // 42
+//	fmt.Println(res.Verdict)     // "Weak"
+//	fmt.Println(res.Issues)      // ["Contains common word", ...]
+//	fmt.Println(res.Suggestions) // ["Good length (16 characters)", ...]
+//
+// # Custom Configuration
+//
+//	cfg := passcheck.DefaultConfig()
+//	cfg.MinLength = 8
+//	cfg.RequireSymbol = false
+//	result, err := passcheck.CheckWithConfig("mypassword", cfg)
+//
+// # Security Considerations
+//
+// Passwords are Go strings, which are immutable and garbage-collected.
+// The library cannot zero them from memory after use. For applications
+// that handle passwords as []byte (e.g. reading from an HTTP request body),
+// [CheckBytes] accepts a byte slice and zeros it immediately after
+// analysis, reducing the window during which plaintext resides in memory.
+//
+// The library never logs, prints, or persists passwords. Analysis results
+// contain only aggregate scores and generic issue descriptions — never the
+// password itself or sensitive substrings.
+//
+// A maximum input length of [MaxPasswordLength] runes is enforced to
+// prevent denial-of-service through algorithmic complexity. Inputs beyond
+// this limit are silently truncated for analysis purposes.
+package passcheck
+
+import (
+	"strings"
+
+	"github.com/rafaelsanzio/passcheck/internal/dictionary"
+	"github.com/rafaelsanzio/passcheck/internal/entropy"
+	"github.com/rafaelsanzio/passcheck/internal/feedback"
+	"github.com/rafaelsanzio/passcheck/internal/patterns"
+	"github.com/rafaelsanzio/passcheck/internal/rules"
+	"github.com/rafaelsanzio/passcheck/internal/safemem"
+	"github.com/rafaelsanzio/passcheck/internal/scoring"
+)
+
+// MaxPasswordLength is the maximum number of runes analyzed.
+// Inputs longer than this are truncated to bound CPU and memory usage
+// of the pattern-detection and dictionary-lookup phases.
+const MaxPasswordLength = 1024
+
+// Verdict constants represent the password strength levels.
+const (
+	VerdictVeryWeak   = "Very Weak"
+	VerdictWeak       = "Weak"
+	VerdictOkay       = "Okay"
+	VerdictStrong     = "Strong"
+	VerdictVeryStrong = "Very Strong"
+)
+
+// Result holds the outcome of a password strength check.
+type Result struct {
+	// Score is the overall password strength score from 0 (weakest) to 100 (strongest).
+	Score int `json:"score"`
+
+	// Verdict is a human-readable strength label.
+	// One of: "Very Weak", "Weak", "Okay", "Strong", "Very Strong".
+	Verdict string `json:"verdict"`
+
+	// Issues is a deduplicated, priority-sorted list of problems found
+	// with the password. Limited to the most critical items for clarity.
+	Issues []string `json:"issues"`
+
+	// Suggestions contains positive feedback about the password's
+	// strengths (e.g. "Good length", "No common patterns detected").
+	// Empty when the password has no notable strengths.
+	Suggestions []string `json:"suggestions"`
+
+	// Entropy is the estimated entropy of the password in bits.
+	Entropy float64 `json:"entropy"`
+}
+
+// Check evaluates the strength of a password using the default
+// configuration and returns a Result.
+//
+// This is a convenience wrapper around [CheckWithConfig] using
+// [DefaultConfig]. It never returns an error because the default
+// configuration is always valid.
+func Check(password string) Result {
+	// DefaultConfig is guaranteed valid — error is always nil.
+	result, _ := CheckWithConfig(password, DefaultConfig())
+	return result
+}
+
+// CheckWithConfig evaluates the strength of a password using a custom
+// configuration. It returns an error if the configuration is invalid.
+//
+// It runs the password through multiple checks:
+//   - Basic rules (length, character sets, repeated characters)
+//   - Pattern detection (keyboard patterns, sequences, repeated blocks)
+//   - Dictionary checks (common passwords, leetspeak variants)
+//   - Entropy calculation
+//
+// Issues are deduplicated, sorted by severity, and limited to cfg.MaxIssues.
+// Positive suggestions are generated for the password's strengths.
+//
+// Passwords longer than [MaxPasswordLength] runes are truncated before
+// analysis to prevent excessive CPU usage.
+func CheckWithConfig(password string, cfg Config) (Result, error) {
+	if err := cfg.Validate(); err != nil {
+		return Result{}, err
+	}
+
+	// Enforce maximum length to bound algorithmic complexity.
+	pw := truncate(password)
+
+	// Map public config to internal options.
+	rulesOpts := rules.Options{
+		MinLength:     cfg.MinLength,
+		RequireUpper:  cfg.RequireUpper,
+		RequireLower:  cfg.RequireLower,
+		RequireDigit:  cfg.RequireDigit,
+		RequireSymbol: cfg.RequireSymbol,
+		MaxRepeats:    cfg.MaxRepeats,
+	}
+
+	patternsOpts := patterns.Options{
+		KeyboardMinLen: cfg.PatternMinLength,
+		SequenceMinLen: cfg.PatternMinLength,
+	}
+
+	dictOpts := dictionary.Options{
+		CustomPasswords: toLowerSlice(cfg.CustomPasswords),
+		CustomWords:     toLowerSlice(cfg.CustomWords),
+		DisableLeet:     cfg.DisableLeet,
+	}
+
+	// Collect issues by category for weighted scoring.
+	issueSet := scoring.IssueSet{
+		Rules:      rules.CheckWith(pw, rulesOpts),
+		Patterns:   patterns.CheckWith(pw, patternsOpts),
+		Dictionary: dictionary.CheckWith(pw, dictOpts),
+	}
+
+	// Entropy calculation
+	e := entropy.Calculate(pw)
+
+	// Weighted scoring using the configured MinLength for bonus baseline.
+	score := scoring.CalculateWith(e, pw, issueSet, cfg.MinLength)
+
+	// Verdict
+	verdict := scoring.Verdict(score)
+
+	// Feedback engine: dedup, prioritize, limit issues.
+	refined := feedback.Refine(issueSet, cfg.MaxIssues)
+
+	// Positive feedback for the password's strengths.
+	suggestions := feedback.GeneratePositive(pw, issueSet, e)
+
+	// Guarantee non-nil slices so JSON encodes as [] not null.
+	if refined == nil {
+		refined = []string{}
+	}
+	if suggestions == nil {
+		suggestions = []string{}
+	}
+
+	return Result{
+		Score:       score,
+		Verdict:     verdict,
+		Issues:      refined,
+		Suggestions: suggestions,
+		Entropy:     e,
+	}, nil
+}
+
+// CheckBytes evaluates password strength from a mutable byte slice
+// using the default configuration.
+//
+// After converting the input to a string for analysis, the original byte
+// slice is immediately zeroed to minimize the time plaintext resides in
+// process memory. The caller should not reuse the slice after this call.
+//
+// Prefer CheckBytes over [Check] when the password originates from a
+// mutable source (e.g. an HTTP request body or a terminal read buffer).
+func CheckBytes(password []byte) Result {
+	// string() copies the bytes — the original slice can be safely zeroed.
+	s := string(password)
+	safemem.Zero(password)
+	return Check(s)
+}
+
+// CheckBytesWithConfig evaluates password strength from a mutable byte
+// slice using a custom configuration. The input is zeroed after analysis.
+//
+// Returns an error if the configuration is invalid.
+func CheckBytesWithConfig(password []byte, cfg Config) (Result, error) {
+	s := string(password)
+	safemem.Zero(password)
+	return CheckWithConfig(s, cfg)
+}
+
+// truncate returns password unchanged if it is within MaxPasswordLength
+// runes, or the first MaxPasswordLength runes otherwise.
+func truncate(password string) string {
+	runes := []rune(password)
+	if len(runes) <= MaxPasswordLength {
+		return password
+	}
+	return string(runes[:MaxPasswordLength])
+}
+
+// toLowerSlice returns a new slice with every string lowercased.
+// Returns nil if the input is nil or empty.
+func toLowerSlice(ss []string) []string {
+	if len(ss) == 0 {
+		return nil
+	}
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = strings.ToLower(s)
+	}
+	return out
+}
