@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - TBD
+
+### Added
+
+- **Structured issues**: `Result.Issues` is now `[]Issue` (Code, Message, Category, Severity). Use `Result.IssueMessages()` for a `[]string` of messages. Issue codes are stable (e.g. `RULE_TOO_SHORT`, `DICT_COMMON_PASSWORD`) for programmatic handling.
+- **Policy presets**: `NISTConfig()`, `UserFriendlyConfig()`, `OWASPConfig()`, `PCIDSSConfig()`, `EnterpriseConfig()` for standard-based configuration. See [presets.go](presets.go) and [MIGRATION.md](MIGRATION.md).
+- **Context-aware detection**: `Config.ContextWords` to reject passwords containing username, email, or custom terms. Matching is case-insensitive and supports substrings and leetspeak variants.
+- **HTTP middleware**: [middleware](middleware/) package for net/http with optional Chi, Echo, Gin, Fiber adapters (build tags). Zero extra dependencies for standard library usage. See [examples/middleware](examples/middleware/).
+- **Examples**: [examples/context](examples/context/) (context-aware), [examples/presets](examples/presets/) (policy presets), [examples/middleware](examples/middleware/) (HTTP middleware).
+
+### Changed
+
+- `Result.Issues` type changed from `[]string` to `[]Issue`. Use `result.IssueMessages()` for backward-compatible `[]string` access.
+
+[1.1.0]: https://github.com/rafaelsanzio/passcheck/compare/v1.0.0...v1.1.0
+
 ## [1.0.0] - 2026-02-06
 
 ### Added

@@ -9,7 +9,7 @@
 //	res := passcheck.Check("P@ssw0rd123")
 //	fmt.Println(res.Score)       // 42
 //	fmt.Println(res.Verdict)     // "Weak"
-//	fmt.Println(res.Issues)      // ["Contains common word", ...]
+//	for _, iss := range res.Issues { fmt.Println(iss.Message) }
 //	fmt.Println(res.Suggestions) // ["Good length (16 characters)", ...]
 //
 // # Custom Configuration
