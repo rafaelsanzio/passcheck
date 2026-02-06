@@ -24,14 +24,16 @@ func TestRefine_SortsBySeverity(t *testing.T) {
 		Rules:      []issue.Issue{issue.New(issue.CodeRuleNoUpper, "Add at least one uppercase letter", issue.CategoryRule, issue.SeverityLow)},
 		Patterns:   []issue.Issue{issue.New(issue.CodePatternSequence, "Contains sequence: 'abcd'", issue.CategoryPattern, issue.SeverityMed)},
 		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonPassword, "This password appears in common password lists", issue.CategoryDictionary, issue.SeverityHigh)},
+		Context:    []issue.Issue{issue.New(issue.CodeContextWord, "Contains personal information: \"john\"", issue.CategoryContext, issue.SeverityHigh)},
 	}
 	result := Refine(issues, 0)
-	if len(result) < 3 {
-		t.Fatalf("expected 3 issues, got %d", len(result))
+	if len(result) < 4 {
+		t.Fatalf("expected 4 issues (dict, context, pattern, rule), got %d", len(result))
 	}
 	assertContains(t, result[0].Message, "password lists")
-	assertContains(t, result[1].Message, "sequence")
-	assertContains(t, result[2].Message, "uppercase")
+	assertContains(t, result[1].Message, "personal information")
+	assertContains(t, result[2].Message, "sequence")
+	assertContains(t, result[3].Message, "uppercase")
 }
 
 func TestRefine_Dedup(t *testing.T) {
