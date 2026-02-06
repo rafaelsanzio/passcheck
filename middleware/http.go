@@ -53,7 +53,7 @@ func (e *httpExtractor) extractJSON(r *http.Request) (string, error) {
 
 	var raw map[string]interface{}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return "", nil // not JSON or invalid; treat as no password
+		return "", err
 	}
 	if v, ok := raw[e.field]; ok {
 		if s, ok := v.(string); ok {
@@ -95,7 +95,7 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 			return
 		}
 		pc := cfg.PasscheckConfig
-		if err := pc.Validate(); err != nil {
+		if verr := pc.Validate(); verr != nil {
 			pc = passcheck.DefaultConfig()
 		}
 		result, err := passcheck.CheckWithConfig(password, pc)
@@ -115,7 +115,7 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 }
 
 // writeWeakPasswordResponse sends a 400 JSON response with score and issues.
-func writeWeakPasswordResponse(w http.ResponseWriter, _ *http.Request, cfg Config, score int, issues []passcheck.Issue, message string) {
+func writeWeakPasswordResponse(w http.ResponseWriter, _ *http.Request, _ Config, score int, issues []passcheck.Issue, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	body := weakPasswordBody{Error: message, Score: score, Issues: issues}

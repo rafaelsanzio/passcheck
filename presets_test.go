@@ -333,7 +333,7 @@ func TestPresetStrictnessOrder(t *testing.T) {
 
 	// NIST should be most lenient (fewest issues or highest score)
 	// Enterprise should be strictest (most issues or lowest score)
-	
+
 	// Verify minimum length ordering
 	if nist.MinLength > userFriendly.MinLength {
 		t.Error("NIST should have lower or equal MinLength than UserFriendly")
@@ -379,7 +379,7 @@ func TestAllPresetsValid(t *testing.T) {
 func TestPresetDocumentation(t *testing.T) {
 	// This is a meta-test to ensure documentation exists
 	// In practice, godoc will verify this, but we can check basic functionality
-	
+
 	presets := []struct {
 		name string
 		fn   func() Config
