@@ -302,3 +302,133 @@ func TestHTTP_CustomPasscheckConfig(t *testing.T) {
 		t.Logf("issues: %+v (expected 'too short' when MinLength=10)", res.Issues)
 	}
 }
+
+// TestHTTP_InvalidJSON_BadRequest ensures invalid JSON body with application/json
+// returns 400 and "invalid request body" (writeError path).
+func TestHTTP_InvalidJSON_BadRequest(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := HTTP(Config{MinScore: 60, PasswordField: "password"}, next)
+
+	body := bytes.NewBufferString("not valid json")
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	var res struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.Error != "invalid request body" {
+		t.Errorf("error = %q, want \"invalid request body\"", res.Error)
+	}
+}
+
+// TestHTTP_ConfigDefaults verifies zero Config gets defaults: MinScore 60, PasswordField "password".
+func TestHTTP_ConfigDefaults(t *testing.T) {
+	// MinScore 0 and PasswordField "" should be filled from DefaultConfig.
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := HTTP(Config{}, next)
+
+	// Weak password should still be rejected (MinScore defaults to 60).
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Body = io.NopCloser(bytes.NewReader([]byte("password=123")))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("with Config{} weak password: status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	// PasswordField "" should default to "password", so form "password=..." works.
+	next2 := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler2 := HTTP(Config{}, next2)
+	req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.Body = io.NopCloser(bytes.NewReader([]byte("password=Xk9$mP2!vR7@nL4&wQ")))
+	rec2 := httptest.NewRecorder()
+	handler2.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("with Config{} strong password (default field): status = %d, want %d", rec2.Code, http.StatusOK)
+	}
+}
+
+// TestHTTP_JSON_BodyRestored verifies the request body is restored after extraction
+// so the next handler can read it (e.g. for further JSON parsing).
+func TestHTTP_JSON_BodyRestored(t *testing.T) {
+	var nextBody []byte
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := HTTP(Config{MinScore: 60, PasswordField: "password"}, next)
+
+	payload := []byte(`{"password":"MyC0mpl3x!P@ss2024","extra":"data"}`)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !bytes.Equal(nextBody, payload) {
+		t.Errorf("next handler body = %q, want %q", nextBody, payload)
+	}
+}
+
+// TestHTTP_OnFailure_ReturnError_StillRejects verifies that when OnFailure returns
+// an error, the middleware still responds with 400 (error is ignored).
+func TestHTTP_OnFailure_ReturnError_StillRejects(t *testing.T) {
+	cfg := Config{
+		MinScore:  80,
+		OnFailure: func([]passcheck.Issue) error { return io.EOF },
+	}
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := HTTP(cfg, next)
+
+	body := bytes.NewBufferString(`{"password":"weak"}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d (OnFailure error should not change response)", rec.Code, http.StatusBadRequest)
+	}
+}
+
+// TestHTTP_InvalidPasscheckConfig_FallsBackToDefault verifies that invalid
+// PasscheckConfig (e.g. MinLength 0) causes the middleware to use passcheck.DefaultConfig()
+// and still validate (strong password passes).
+func TestHTTP_InvalidPasscheckConfig_FallsBackToDefault(t *testing.T) {
+	cfg := Config{
+		MinScore:       60,
+		PasswordField:  "password",
+		PasscheckConfig: passcheck.Config{}, // invalid: MinLength 0
+	}
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := HTTP(cfg, next)
+
+	body := bytes.NewBufferString(`{"password":"MyC0mpl3x!P@ss2024"}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d (invalid config should fallback to default)", rec.Code, http.StatusOK)
+	}
+	if !nextCalled {
+		t.Error("next handler should be called when fallback config accepts password")
+	}
+}
