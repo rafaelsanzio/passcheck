@@ -408,8 +408,8 @@ func TestHTTP_OnFailure_ReturnError_StillRejects(t *testing.T) {
 // and still validate (strong password passes).
 func TestHTTP_InvalidPasscheckConfig_FallsBackToDefault(t *testing.T) {
 	cfg := Config{
-		MinScore:       60,
-		PasswordField:  "password",
+		MinScore:        60,
+		PasswordField:   "password",
 		PasscheckConfig: passcheck.Config{}, // invalid: MinLength 0
 	}
 	nextCalled := false
