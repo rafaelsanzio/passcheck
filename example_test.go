@@ -92,3 +92,42 @@ func ExampleCheck_suggestions() {
 	// Not found in common password lists
 	// Good entropy (131 bits)
 }
+
+// ExampleCheckIncremental demonstrates real-time feedback: pass the previous
+// result so the UI can update only when the score or issues change. Debounce
+// input (e.g. 100–300 ms) when calling on every keystroke.
+func ExampleCheckIncremental() {
+	var lastResult *passcheck.Result
+	onPasswordChange := func(password string) {
+		result := passcheck.CheckIncremental(password, lastResult)
+		fmt.Printf("Score: %d, Verdict: %s\n", result.Score, result.Verdict)
+		lastResult = &result
+	}
+	onPasswordChange("a")
+	onPasswordChange("ab")
+	onPasswordChange("MyP@ssw0rd")
+	// Output:
+	// Score: 0, Verdict: Very Weak
+	// Score: 0, Verdict: Very Weak
+	// Score: 20, Verdict: Very Weak
+}
+
+// ExampleCheckIncrementalWithConfig shows how to use the delta to avoid
+// redundant UI updates when nothing changed.
+func ExampleCheckIncrementalWithConfig() {
+	cfg := passcheck.DefaultConfig()
+	var lastResult *passcheck.Result
+	password := "Xk9$mP2!vR7@nL4&wQzB"
+	result, delta, _ := passcheck.CheckIncrementalWithConfig(password, lastResult, cfg)
+	fmt.Printf("Score: %d\n", result.Score)
+	fmt.Printf("ScoreChanged: %v\n", delta.ScoreChanged)
+	// Call again with same password and previous result; deltas are false.
+	result2, delta2, _ := passcheck.CheckIncrementalWithConfig(password, &result, cfg)
+	fmt.Printf("Same score: %v\n", result2.Score == result.Score)
+	fmt.Printf("ScoreChanged: %v\n", delta2.ScoreChanged)
+	// Output:
+	// Score: 100
+	// ScoreChanged: true
+	// Same score: true
+	// ScoreChanged: false
+}

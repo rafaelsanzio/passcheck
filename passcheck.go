@@ -19,6 +19,14 @@
 //	cfg.RequireSymbol = false
 //	result, err := passcheck.CheckWithConfig("mypassword", cfg)
 //
+// # Real-time feedback
+//
+// For password strength meters and live feedback, use [CheckIncremental] or
+// [CheckIncrementalWithConfig]. Pass the previous result so the API can return
+// an [IncrementalDelta] indicating what changed; the UI can skip updates when
+// nothing changed. Debounce input (e.g. 100–300 ms) when calling on every
+// keystroke to keep the UI responsive.
+//
 // # Security Considerations
 //
 // Passwords are Go strings, which are immutable and garbage-collected.
@@ -126,6 +134,17 @@ func (r Result) IssueMessages() []string {
 		out[i] = iss.Message
 	}
 	return out
+}
+
+// IncrementalDelta describes what changed between a previous check result and the
+// current one. Use it to avoid redundant UI updates when using [CheckIncrementalWithConfig].
+type IncrementalDelta struct {
+	// ScoreChanged is true if the score differs from the previous result.
+	ScoreChanged bool
+	// IssuesChanged is true if the issues list (codes or messages) differs from the previous result.
+	IssuesChanged bool
+	// SuggestionsChanged is true if the suggestions list differs from the previous result.
+	SuggestionsChanged bool
 }
 
 // Check evaluates the strength of a password using the default
@@ -252,6 +271,79 @@ func CheckBytesWithConfig(password []byte, cfg Config) (Result, error) {
 	s := string(password)
 	safemem.Zero(password)
 	return CheckWithConfig(s, cfg)
+}
+
+// CheckIncremental evaluates the strength of a password using the default
+// configuration and is intended for real-time feedback (e.g. strength meters).
+//
+// When previous is nil, the behavior is identical to [Check]. When previous
+// is non-nil, a full check is performed and the new result is returned; the
+// previous result is not used to skip work (callers can compare the returned
+// result with previous to detect changes). For delta information and custom
+// config, use [CheckIncrementalWithConfig].
+//
+// When used on every keystroke, callers should debounce (e.g. 100–300 ms) to
+// limit CPU usage and keep the UI responsive.
+func CheckIncremental(password string, previous *Result) Result {
+	result, _, _ := CheckIncrementalWithConfig(password, previous, DefaultConfig())
+	return result
+}
+
+// CheckIncrementalWithConfig evaluates the strength of a password using a
+// custom configuration and returns the result plus an [IncrementalDelta]
+// describing what changed relative to the previous result.
+//
+// When previous is nil, a full check is performed and the delta has all
+// Changed fields set to true. When previous is non-nil, the delta indicates
+// whether score, issues, or suggestions differ so the UI can skip redundant
+// updates. Returns an error if the configuration is invalid.
+//
+// For real-time UIs, debounce input (e.g. 100–300 ms) before calling to
+// avoid excessive work on every keystroke.
+func CheckIncrementalWithConfig(password string, previous *Result, cfg Config) (Result, IncrementalDelta, error) {
+	result, err := CheckWithConfig(password, cfg)
+	if err != nil {
+		return Result{}, IncrementalDelta{}, err
+	}
+	delta := incrementalDeltaFrom(previous, result)
+	return result, delta, nil
+}
+
+// incrementalDeltaFrom builds an IncrementalDelta by comparing curr to previous.
+// When previous is nil, all Changed fields are true.
+func incrementalDeltaFrom(previous *Result, curr Result) IncrementalDelta {
+	if previous == nil {
+		return IncrementalDelta{ScoreChanged: true, IssuesChanged: true, SuggestionsChanged: true}
+	}
+	return IncrementalDelta{
+		ScoreChanged:       previous.Score != curr.Score,
+		IssuesChanged:      !issuesEqual(previous.Issues, curr.Issues),
+		SuggestionsChanged: !suggestionsEqual(previous.Suggestions, curr.Suggestions),
+	}
+}
+
+func issuesEqual(a, b []Issue) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Code != b[i].Code || a[i].Message != b[i].Message {
+			return false
+		}
+	}
+	return true
+}
+
+func suggestionsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // truncate returns password unchanged if it is within MaxPasswordLength
