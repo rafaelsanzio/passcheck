@@ -10,6 +10,7 @@
 package context
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/rafaelsanzio/passcheck/internal/issue"
@@ -177,7 +178,7 @@ func extractEmailParts(email string) []string {
 	domainParts := strings.Split(domain, ".")
 	for _, part := range domainParts {
 		result = append(result, part)
-		
+
 		// Also split domain parts on hyphens and underscores
 		// e.g., "acme-corp" -> ["acme", "corp"]
 		if strings.ContainsAny(part, "-_") {
@@ -212,14 +213,10 @@ func containsContextWord(pwLower, pwNormalized, word string) bool {
 
 	// Check leetspeak-normalized version
 	wordNormalized := leet.Normalize(word)
-	if strings.Contains(pwNormalized, wordNormalized) {
-		return true
-	}
-
-	return false
+	return strings.Contains(pwNormalized, wordNormalized)
 }
 
 // formatContextMessage creates a human-readable message for a context word match.
 func formatContextMessage(word string) string {
-	return "Contains personal information: \"" + word + "\""
+	return fmt.Sprintf("Contains personal information: %q", word)
 }

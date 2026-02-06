@@ -11,14 +11,14 @@ func ExampleCheckWithConfig_contextAware() {
 	// Configure with user-specific context
 	cfg := passcheck.DefaultConfig()
 	cfg.ContextWords = []string{
-		"john",                    // username
-		"john.doe@acme-corp.com",  // email (auto-parsed)
-		"acmecorp",                // company name
+		"john",                   // username
+		"john.doe@acme-corp.com", // email (auto-parsed)
+		"acmecorp",               // company name
 	}
 
 	// This password contains the username "john"
 	result, _ := passcheck.CheckWithConfig("John123!", cfg)
-	
+
 	// Check if context was detected
 	hasContextIssue := false
 	for _, iss := range result.Issues {
@@ -28,7 +28,7 @@ func ExampleCheckWithConfig_contextAware() {
 			break
 		}
 	}
-	
+
 	fmt.Printf("Contains personal info: %v\n", hasContextIssue)
 
 	// Output:
@@ -43,7 +43,7 @@ func ExampleCheckWithConfig_contextAwareEmail() {
 
 	// Password contains "doe" extracted from the email
 	result, _ := passcheck.CheckWithConfig("MyDoe2024!", cfg)
-	
+
 	hasContextIssue := false
 	for _, iss := range result.Issues {
 		if iss.Category == "context" {
@@ -51,7 +51,7 @@ func ExampleCheckWithConfig_contextAwareEmail() {
 			break
 		}
 	}
-	
+
 	fmt.Printf("Detected email component: %v\n", hasContextIssue)
 
 	// Output:
@@ -65,7 +65,7 @@ func ExampleCheckWithConfig_contextAwareLeetspeak() {
 
 	// Password contains "@dm1n" (leetspeak variant of "admin")
 	result, _ := passcheck.CheckWithConfig("@dm1n2024!", cfg)
-	
+
 	hasContextIssue := false
 	for _, iss := range result.Issues {
 		if iss.Category == "context" {
@@ -73,7 +73,7 @@ func ExampleCheckWithConfig_contextAwareLeetspeak() {
 			break
 		}
 	}
-	
+
 	fmt.Printf("Detected leetspeak variant: %v\n", hasContextIssue)
 
 	// Output:

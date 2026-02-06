@@ -401,11 +401,11 @@ func TestExtractWords(t *testing.T) {
 
 func TestContainsContextWord(t *testing.T) {
 	tests := []struct {
-		name          string
-		pwLower       string
-		pwNormalized  string
-		word          string
-		want          bool
+		name         string
+		pwLower      string
+		pwNormalized string
+		word         string
+		want         bool
 	}{
 		{
 			name:         "exact substring",
