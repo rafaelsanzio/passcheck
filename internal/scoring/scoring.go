@@ -24,6 +24,7 @@ const (
 	PenaltyPerPattern   = 10 // keyboard walk, sequence, block, substitution
 	PenaltyPerDictMatch = 15 // common password, common word, leet variant
 	PenaltyPerContext   = 20 // personal information (username, email, company)
+	PenaltyPerHIBP      = 25 // password found in breach database (HIBP)
 )
 
 // Bonus parameters.
@@ -60,15 +61,17 @@ type IssueSet struct {
 	Patterns   []issue.Issue // Phase 2: pattern detections
 	Dictionary []issue.Issue // Phase 3: dictionary matches
 	Context    []issue.Issue // Phase 4: context-aware detections
+	HIBP       []issue.Issue // Phase 5: breach database (HIBP)
 }
 
 // AllIssues returns a single flat slice of all issues in evaluation order.
 func (s IssueSet) AllIssues() []issue.Issue {
-	out := make([]issue.Issue, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary)+len(s.Context))
+	out := make([]issue.Issue, 0, len(s.Rules)+len(s.Patterns)+len(s.Dictionary)+len(s.Context)+len(s.HIBP))
 	out = append(out, s.Rules...)
 	out = append(out, s.Patterns...)
 	out = append(out, s.Dictionary...)
 	out = append(out, s.Context...)
+	out = append(out, s.HIBP...)
 	return out
 }
 
@@ -97,7 +100,8 @@ func CalculateWith(entropyBits float64, password string, issues IssueSet, minLen
 	penalty := len(issues.Rules)*PenaltyPerRule +
 		len(issues.Patterns)*PenaltyPerPattern +
 		len(issues.Dictionary)*PenaltyPerDictMatch +
-		len(issues.Context)*PenaltyPerContext
+		len(issues.Context)*PenaltyPerContext +
+		len(issues.HIBP)*PenaltyPerHIBP
 
 	score := int(base) + bonus - penalty
 
