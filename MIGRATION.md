@@ -114,3 +114,23 @@ Optional adapters for Chi, Echo, Gin, Fiber are in the same package (build tags)
 | You have an HTTP registration endpoint | Add `middleware.HTTP(cfg, handler)` |
 
 No code change is required if you only use `Check()` or `CheckWithConfig()` and do not depend on the type of `Result.Issues` (e.g. you only use `result.Score` and `result.Verdict`).
+
+---
+
+## Optional: Breach database (HIBP)
+
+To check passwords against the Have I Been Pwned breach database (k-anonymity; only a 5-char hash prefix is sent), set `Config.HIBPChecker` to a client from the [hibp](hibp/) package:
+
+```go
+import (
+    "github.com/rafaelsanzio/passcheck"
+    "github.com/rafaelsanzio/passcheck/hibp"
+)
+
+cfg := passcheck.DefaultConfig()
+cfg.HIBPChecker = hibp.NewClient()
+cfg.HIBPMinOccurrences = 1
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+Breach findings appear as issues with `Code == passcheck.CodeHIBPBreached`. On network or API errors, the breach check is skipped. See [hibp](hibp/) and [examples/hibp](examples/hibp/).
