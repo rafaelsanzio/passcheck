@@ -79,6 +79,19 @@ type Config struct {
 	// an HIBP_BREACHED issue. Only used when HIBPChecker is set.
 	// Default: 1 (report if found in any breach).
 	HIBPMinOccurrences int
+
+	// ConstantTimeMode, when true, uses constant-time string comparison and
+	// substring checks in dictionary lookups so that response time does not
+	// leak whether the password matched a blocklist entry or where it matched.
+	// Default: false (faster, non-constant-time lookups).
+	ConstantTimeMode bool
+
+	// MinExecutionTimeMs is the minimum total execution time in milliseconds
+	// for CheckWithConfig (and related) when ConstantTimeMode is true. The
+	// function sleeps for the remaining time so that response duration does not
+	// leak information. Ignored when zero or negative or when ConstantTimeMode
+	// is false. Default: 0 (no padding).
+	MinExecutionTimeMs int
 }
 
 // DefaultConfig returns the recommended configuration with sensible
@@ -104,6 +117,7 @@ func DefaultConfig() Config {
 //   - MaxRepeats must be >= 2
 //   - PatternMinLength must be >= 3
 //   - MaxIssues must be >= 0
+//   - MinExecutionTimeMs must be >= 0 when set
 func (c Config) Validate() error {
 	if c.MinLength < 1 {
 		return fmt.Errorf("passcheck: MinLength must be >= 1, got %d", c.MinLength)
@@ -116,6 +130,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxIssues < 0 {
 		return fmt.Errorf("passcheck: MaxIssues must be >= 0, got %d", c.MaxIssues)
+	}
+	if c.MinExecutionTimeMs < 0 {
+		return fmt.Errorf("passcheck: MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)
 	}
 	return nil
 }
