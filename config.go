@@ -63,6 +63,22 @@ type Config struct {
 	// not applied, and only the plain password is checked against
 	// dictionaries. Default: false (leet normalization enabled).
 	DisableLeet bool
+
+	// HIBPChecker is an optional checker for the Have I Been Pwned (HIBP)
+	// breach database. When set, the password is checked via k-anonymity
+	// (only a 5-character prefix of its SHA-1 hash is sent). If the
+	// password is found and the count meets HIBPMinOccurrences, an
+	// HIBP_BREACHED issue is added. On network or API errors, the check
+	// is skipped (graceful degradation). Use the hibp package to obtain
+	// a Client that implements this interface.
+	HIBPChecker interface {
+		Check(password string) (breached bool, count int, err error)
+	}
+
+	// HIBPMinOccurrences is the minimum breach count required to report
+	// an HIBP_BREACHED issue. Only used when HIBPChecker is set.
+	// Default: 1 (report if found in any breach).
+	HIBPMinOccurrences int
 }
 
 // DefaultConfig returns the recommended configuration with sensible

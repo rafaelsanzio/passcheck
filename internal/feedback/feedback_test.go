@@ -36,6 +36,24 @@ func TestRefine_SortsBySeverity(t *testing.T) {
 	assertContains(t, result[3].Message, "uppercase")
 }
 
+func TestRefine_HIBP_FirstInOrder(t *testing.T) {
+	// buildRanked orders: HIBP, Dictionary, Context, Patterns, Rules.
+	// HIBP issues must be included and appear first when present.
+	issues := scoring.IssueSet{
+		HIBP:       []issue.Issue{issue.New(issue.CodeHIBPBreached, "Password has been found in a data breach.", issue.CategoryBreach, issue.SeverityHigh)},
+		Rules:      []issue.Issue{issue.New(issue.CodeRuleTooShort, "Too short", issue.CategoryRule, issue.SeverityLow)},
+		Dictionary: []issue.Issue{issue.New(issue.CodeDictCommonPassword, "Common password", issue.CategoryDictionary, issue.SeverityHigh)},
+	}
+	result := Refine(issues, 0)
+	if len(result) < 3 {
+		t.Fatalf("expected at least 3 issues (HIBP, dict, rule), got %d", len(result))
+	}
+	if result[0].Code != issue.CodeHIBPBreached {
+		t.Errorf("first issue should be HIBP (buildRanked order), got Code=%q", result[0].Code)
+	}
+	assertContains(t, result[0].Message, "data breach")
+}
+
 func TestRefine_Dedup(t *testing.T) {
 	issues := scoring.IssueSet{
 		Patterns:   []issue.Issue{issue.New(issue.CodePatternSubstitution, "Contains common word with substitution: 'sunshine'", issue.CategoryPattern, issue.SeverityMed)},
