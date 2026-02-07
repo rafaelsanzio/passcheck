@@ -39,6 +39,41 @@ The following items have been reviewed for the v1.0.0 release:
   before any analysis begins.
 - [x] **No panics**: all code paths return errors or handle edge cases gracefully
   (empty strings, nil slices, zero-length inputs).
+- [x] **Timing attack mitigation (optional)**: `ConstantTimeMode` and
+  `MinExecutionTimeMs` provide constant-time dictionary lookups and
+  execution-time padding when enabled; see [Timing attack protection](#timing-attack-protection-optional).
+
+## Timing attack protection (optional)
+
+When handling passwords in high-assurance or threat models where an attacker
+can measure response time (e.g. remote timing), enable timing-attack mitigations:
+
+1. **Constant-time mode**  
+   Set `Config.ConstantTimeMode = true`. Dictionary lookups then use
+   constant-time string comparison and substring checks so that execution time
+   does not depend on whether the password matched a blocklist entry or where it
+   matched. This is slower than normal lookups (linear scan over lists instead
+   of map lookups and short-circuit substring search).
+
+2. **Minimum execution time**  
+   Set `Config.MinExecutionTimeMs` (e.g. 10) while `ConstantTimeMode` is true.
+   The library sleeps for the remaining time after the check so that total
+   response duration does not leak how much work was done. Use a value that
+   covers the worst-case check time on your hardware.
+
+**Guarantees and limitations:**
+
+- Constant-time comparison and contains are implemented using `crypto/subtle`
+  and fixed iteration counts so that timing does not depend on length or
+  content of the secret.
+- Statistical timing tests (two no-match runs) are used in tests to verify
+  that we do not short-circuit (p ≥ 0.01).
+- Performance overhead when `ConstantTimeMode` is true is design-bound
+  (linear scan over password and word lists); target is &lt;20% for typical
+  inputs when no minimum execution time padding is used. Use the
+  `BenchmarkCheckWithConfig_*` benchmarks to measure on your system.
+- Minimum execution time padding is best-effort; scheduling and other
+  processes can still cause variance.
 
 ## Limitations
 

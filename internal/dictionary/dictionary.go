@@ -53,12 +53,12 @@ func CheckWith(password string, opts Options) []issue.Issue {
 func checkExactPasswordWith(password, normalized string, opts Options) []issue.Issue {
 	var issues []issue.Issue
 
-	if isCommonPasswordIn(password, opts.CustomPasswords) {
+	if isCommonPasswordIn(password, opts.CustomPasswords, opts.ConstantTime) {
 		issues = append(issues, issue.New(issue.CodeDictCommonPassword, "This password appears in common password lists", issue.CategoryDictionary, issue.SeverityHigh))
 		return issues // exact match is the strongest signal; no need to also flag leet
 	}
 
-	if normalized != password && isCommonPasswordIn(normalized, opts.CustomPasswords) {
+	if normalized != password && isCommonPasswordIn(normalized, opts.CustomPasswords, opts.ConstantTime) {
 		issues = append(issues, issue.New(issue.CodeDictLeetVariant, "This is a leetspeak variant of a common password", issue.CategoryDictionary, issue.SeverityHigh))
 	}
 
@@ -72,11 +72,11 @@ func checkCommonWordsWith(password, normalized string, opts Options) []issue.Iss
 	var issues []issue.Issue
 
 	// Select word-finding function based on whether custom words are present.
-	findWords := findCommonWords
-	if len(opts.CustomWords) > 0 {
-		findWords = func(pw string) []string {
-			return findCommonWordsWithCustom(pw, opts.CustomWords)
+	findWords := func(pw string) []string {
+		if len(opts.CustomWords) > 0 {
+			return findCommonWordsWithCustom(pw, opts.CustomWords, opts.ConstantTime)
 		}
+		return findCommonWords(pw, opts.ConstantTime)
 	}
 
 	// Plain-text word matches.

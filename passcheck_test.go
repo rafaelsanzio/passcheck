@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaelsanzio/passcheck/internal/safemem"
 )
@@ -331,6 +332,9 @@ func TestConfig_Validate(t *testing.T) {
 		{"MaxIssues=-1", func(c *Config) { c.MaxIssues = -1 }, true},
 		{"MaxIssues=0", func(c *Config) { c.MaxIssues = 0 }, false},
 		{"MaxIssues=10", func(c *Config) { c.MaxIssues = 10 }, false},
+		{"MinExecutionTimeMs=-1", func(c *Config) { c.MinExecutionTimeMs = -1 }, true},
+		{"MinExecutionTimeMs=0", func(c *Config) { c.MinExecutionTimeMs = 0 }, false},
+		{"MinExecutionTimeMs=10", func(c *Config) { c.MinExecutionTimeMs = 10 }, false},
 	}
 
 	for _, tt := range tests {
@@ -643,6 +647,47 @@ func TestCheckWithConfig_HIBP_NilChecker_NoIssue(t *testing.T) {
 	}
 }
 
+func TestCheckWithConfig_ConstantTimeMode_SameResult(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.RequireSymbol = false
+	resultNormal, err := CheckWithConfig("password", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cfg.ConstantTimeMode = true
+	resultConstantTime, err := CheckWithConfig("password", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resultNormal.Score != resultConstantTime.Score {
+		t.Errorf("ConstantTimeMode should not change score: got %d vs %d", resultNormal.Score, resultConstantTime.Score)
+	}
+	if resultNormal.Verdict != resultConstantTime.Verdict {
+		t.Errorf("ConstantTimeMode should not change verdict: got %s vs %s", resultNormal.Verdict, resultConstantTime.Verdict)
+	}
+	if len(resultNormal.Issues) != len(resultConstantTime.Issues) {
+		t.Errorf("ConstantTimeMode should not change issue count: got %d vs %d", len(resultNormal.Issues), len(resultConstantTime.Issues))
+	}
+}
+
+func TestCheckWithConfig_MinExecutionTimeMs_Padding(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.RequireSymbol = false
+	cfg.ConstantTimeMode = true
+	cfg.MinExecutionTimeMs = 15
+	start := time.Now()
+	_, err := CheckWithConfig("aB3!xy", cfg)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if elapsed < 14*time.Millisecond {
+		t.Errorf("expected at least ~15ms when MinExecutionTimeMs=15, got %v", elapsed)
+	}
+}
+
 func TestCheckWithConfig_ScoringAdaptsToMinLength(t *testing.T) {
 	cfg8 := DefaultConfig()
 	cfg8.MinLength = 8
@@ -929,5 +974,22 @@ func BenchmarkCheck_VeryLong(b *testing.B) {
 	pw := strings.Repeat("aB3!xY7@", 200) // 1600 chars → truncated to 1024
 	for i := 0; i < b.N; i++ {
 		Check(pw)
+	}
+}
+
+func BenchmarkCheckWithConfig_Default(b *testing.B) {
+	cfg := DefaultConfig()
+	pw := "Xk9$mP2!vR7@nL4&wQzB"
+	for i := 0; i < b.N; i++ {
+		_, _ = CheckWithConfig(pw, cfg)
+	}
+}
+
+func BenchmarkCheckWithConfig_ConstantTimeMode(b *testing.B) {
+	cfg := DefaultConfig()
+	cfg.ConstantTimeMode = true
+	pw := "Xk9$mP2!vR7@nL4&wQzB"
+	for i := 0; i < b.N; i++ {
+		_, _ = CheckWithConfig(pw, cfg)
 	}
 }

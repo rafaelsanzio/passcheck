@@ -52,6 +52,7 @@ package passcheck
 
 import (
 	"strings"
+	"time"
 
 	"github.com/rafaelsanzio/passcheck/internal/context"
 	"github.com/rafaelsanzio/passcheck/internal/dictionary"
@@ -185,6 +186,7 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	if err := cfg.Validate(); err != nil {
 		return Result{}, err
 	}
+	start := time.Now()
 
 	// Enforce maximum length to bound algorithmic complexity.
 	pw := truncate(password)
@@ -208,6 +210,7 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		CustomPasswords: toLowerSlice(cfg.CustomPasswords),
 		CustomWords:     toLowerSlice(cfg.CustomWords),
 		DisableLeet:     cfg.DisableLeet,
+		ConstantTime:    cfg.ConstantTimeMode,
 	}
 
 	contextOpts := context.Options{
@@ -265,6 +268,9 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		suggestions = []string{}
 	}
 
+	if cfg.ConstantTimeMode && cfg.MinExecutionTimeMs > 0 {
+		safemem.SleepRemaining(start, cfg.MinExecutionTimeMs)
+	}
 	return Result{
 		Score:       score,
 		Verdict:     verdict,
