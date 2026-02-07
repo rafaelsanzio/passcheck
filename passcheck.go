@@ -19,6 +19,12 @@
 //	cfg.RequireSymbol = false
 //	result, err := passcheck.CheckWithConfig("mypassword", cfg)
 //
+// # Breach database (optional)
+//
+// Set [Config.HIBPChecker] to a client from the [hibp] package to check
+// passwords against the Have I Been Pwned API (k-anonymity; only a 5-char
+// hash prefix is sent). On API errors, the check is skipped.
+//
 // # Real-time feedback
 //
 // For password strength meters and live feedback, use [CheckIncremental] or

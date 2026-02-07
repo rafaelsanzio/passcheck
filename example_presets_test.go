@@ -88,3 +88,58 @@ func ExampleNISTConfig_withContext() {
 	// Output:
 	// Has issues: true
 }
+
+// ExampleCheckWithConfig_customPasswords demonstrates blocking additional passwords via CustomPasswords.
+func ExampleCheckWithConfig_customPasswords() {
+	cfg := passcheck.DefaultConfig()
+	cfg.MinLength = 6
+	cfg.RequireSymbol = false
+	cfg.CustomPasswords = []string{"internal2024", "company_secret"}
+
+	result, _ := passcheck.CheckWithConfig("internal2024", cfg)
+	fmt.Printf("Blocked by CustomPasswords: %v\n", len(result.Issues) > 0)
+	// Output:
+	// Blocked by CustomPasswords: true
+}
+
+// ExampleCheckWithConfig_customWords demonstrates detecting additional substrings via CustomWords.
+func ExampleCheckWithConfig_customWords() {
+	cfg := passcheck.DefaultConfig()
+	cfg.MinLength = 8
+	cfg.RequireSymbol = false
+	cfg.CustomWords = []string{"acme", "widget"}
+
+	result, _ := passcheck.CheckWithConfig("Xk9$mP2!AcmeR7", cfg)
+	hasCustomWord := false
+	for _, iss := range result.Issues {
+		if iss.Code == passcheck.CodeDictCommonWord || iss.Code == passcheck.CodeDictCommonWordSub {
+			hasCustomWord = true
+			break
+		}
+	}
+	fmt.Printf("Custom word detected: %v\n", hasCustomWord)
+	// Output:
+	// Custom word detected: true
+}
+
+// ExampleCheckWithConfig_disableLeet demonstrates disabling leetspeak normalization.
+// When DisableLeet is true, only the plain password is checked against dictionaries.
+func ExampleCheckWithConfig_disableLeet() {
+	cfg := passcheck.DefaultConfig()
+	cfg.MinLength = 6
+	cfg.RequireSymbol = false
+	cfg.DisableLeet = true
+
+	// "p@ssw0rd" with leet enabled would match "password"; with DisableLeet it does not.
+	result, _ := passcheck.CheckWithConfig("p@ssw0rd", cfg)
+	leetIssue := false
+	for _, iss := range result.Issues {
+		if iss.Code == passcheck.CodeDictLeetVariant {
+			leetIssue = true
+			break
+		}
+	}
+	fmt.Printf("Leet variant reported: %v\n", leetIssue)
+	// Output:
+	// Leet variant reported: false
+}

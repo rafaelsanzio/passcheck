@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/rafaelsanzio/passcheck"
+	"github.com/rafaelsanzio/passcheck/hibp"
 )
 
 func ExampleCheck() {
@@ -78,6 +79,58 @@ func ExampleConfig_Validate() {
 	// passcheck: MinLength must be >= 1, got 0
 }
 
+// ExampleResult_IssueMessages shows backward-compatible message slice from Result.Issues.
+func ExampleResult_IssueMessages() {
+	// Use a password that fails only length so we get one predictable issue.
+	result := passcheck.Check("Xk9$m")
+	messages := result.IssueMessages()
+	fmt.Printf("Issue count: %d\n", len(messages))
+	for _, msg := range messages {
+		fmt.Println(msg)
+	}
+	// Output:
+	// Issue count: 1
+	// Too short (minimum 12 characters)
+}
+
+// ExampleCheckWithConfig_invalidConfig shows that an invalid config returns an error.
+func ExampleCheckWithConfig_invalidConfig() {
+	cfg := passcheck.Config{MinLength: -1}
+	result, err := passcheck.CheckWithConfig("any", cfg)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Printf("Score: %d\n", result.Score)
+	// Output:
+	// Error: passcheck: MinLength must be >= 1, got -1
+}
+
+// ExampleCheckBytesWithConfig runs CheckBytes with custom config and zeroes the buffer.
+func ExampleCheckBytesWithConfig() {
+	cfg := passcheck.DefaultConfig()
+	cfg.MinLength = 8
+	cfg.RequireSymbol = false
+	buf := []byte("MyPass99")
+	result, err := passcheck.CheckBytesWithConfig(buf, cfg)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Printf("Score: %d\n", result.Score)
+	allZero := true
+	for _, b := range buf {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	fmt.Printf("Input zeroed: %v\n", allZero)
+	// Output:
+	// Score: 12
+	// Input zeroed: true
+}
+
 func ExampleCheck_suggestions() {
 	result := passcheck.Check("Xk9$mP2!vR7@nL4&wQzB")
 	fmt.Printf("Suggestions: %d\n", len(result.Suggestions))
@@ -91,6 +144,50 @@ func ExampleCheck_suggestions() {
 	// No common patterns detected
 	// Not found in common password lists
 	// Good entropy (131 bits)
+}
+
+// ExampleIssue_codes shows programmatic handling of issues by code (e.g. for i18n or custom UI).
+func ExampleIssue_codes() {
+	result := passcheck.Check("short")
+	for _, iss := range result.Issues {
+		switch iss.Code {
+		case passcheck.CodeRuleTooShort:
+			fmt.Println("Rule: too short")
+		case passcheck.CodeDictCommonPassword:
+			fmt.Println("Dictionary: common password")
+		case passcheck.CodeHIBPBreached:
+			fmt.Println("Breach: found in HIBP")
+		default:
+			fmt.Printf("Other: %s\n", iss.Code)
+		}
+	}
+	// Output:
+	// Rule: too short
+}
+
+// ExampleCheckWithConfig_hibp shows breach checking using the hibp package (mock for deterministic output).
+func ExampleCheckWithConfig_hibp() {
+	cfg := passcheck.DefaultConfig()
+	cfg.MinLength = 6
+	cfg.RequireSymbol = false
+	// In production use hibp.NewClient(); here a mock avoids network calls.
+	cfg.HIBPChecker = &hibp.MockClient{
+		CheckFunc: func(_ string) (bool, int, error) { return true, 42, nil },
+	}
+	result, err := passcheck.CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	for _, iss := range result.Issues {
+		if iss.Code == passcheck.CodeHIBPBreached {
+			fmt.Println("Breach reported: true")
+			return
+		}
+	}
+	fmt.Println("Breach reported: false")
+	// Output:
+	// Breach reported: true
 }
 
 // ExampleCheckIncremental demonstrates real-time feedback: pass the previous
