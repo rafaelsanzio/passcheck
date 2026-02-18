@@ -450,6 +450,121 @@ func TestCheckWithConfig_EquivalentToCheck(t *testing.T) {
 	}
 }
 
+// --- CheckIncremental / CheckIncrementalWithConfig ---
+
+func TestCheckIncremental_NilPrevious_EqualsCheck(t *testing.T) {
+	password := "Xk9$mP2!vR7@nL4&wQzB"
+	resultCheck := Check(password)
+	resultInc := CheckIncremental(password, nil)
+	if resultInc.Score != resultCheck.Score {
+		t.Errorf("CheckIncremental(pw, nil).Score = %d, Check(pw).Score = %d", resultInc.Score, resultCheck.Score)
+	}
+	if resultInc.Verdict != resultCheck.Verdict {
+		t.Errorf("CheckIncremental(pw, nil).Verdict = %q, Check(pw).Verdict = %q", resultInc.Verdict, resultCheck.Verdict)
+	}
+	if len(resultInc.Issues) != len(resultCheck.Issues) {
+		t.Errorf("issues length: incremental %d, check %d", len(resultInc.Issues), len(resultCheck.Issues))
+	}
+}
+
+func TestCheckIncremental_WithPrevious_ReturnsNewResult(t *testing.T) {
+	prev := Check("weak")
+	result := CheckIncremental("Xk9$mP2!vR7@nL4&wQzB", &prev)
+	if result.Score == prev.Score {
+		t.Error("result should differ from previous when password changed")
+	}
+	if result.Score < 90 {
+		t.Errorf("strong password should score high, got %d", result.Score)
+	}
+}
+
+func TestCheckIncrementalWithConfig_InvalidConfig_ReturnsError(t *testing.T) {
+	_, _, err := CheckIncrementalWithConfig("test", nil, Config{})
+	if err == nil {
+		t.Error("expected error for invalid config")
+	}
+}
+
+func TestCheckIncrementalWithConfig_NilPrevious_AllDeltasTrue(t *testing.T) {
+	cfg := DefaultConfig()
+	result, delta, err := CheckIncrementalWithConfig("password", nil, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !delta.ScoreChanged || !delta.IssuesChanged || !delta.SuggestionsChanged {
+		t.Errorf("nil previous: expected all deltas true, got %+v", delta)
+	}
+	if result.Score < 0 || result.Score > 100 {
+		t.Errorf("invalid score: %d", result.Score)
+	}
+}
+
+func TestCheckIncrementalWithConfig_SamePassword_SameResult_NoDelta(t *testing.T) {
+	cfg := DefaultConfig()
+	password := "Xk9$mP2!vR7@nL4&wQzB"
+	first, _, err := CheckIncrementalWithConfig(password, nil, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	second, delta, err := CheckIncrementalWithConfig(password, &first, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if second.Score != first.Score {
+		t.Errorf("same password: score %d != %d", second.Score, first.Score)
+	}
+	if delta.ScoreChanged {
+		t.Error("same password: expected ScoreChanged false")
+	}
+	if delta.IssuesChanged {
+		t.Error("same password: expected IssuesChanged false")
+	}
+	if delta.SuggestionsChanged {
+		t.Error("same password: expected SuggestionsChanged false")
+	}
+}
+
+func TestCheckIncrementalWithConfig_DifferentPassword_DeltaReflectsChange(t *testing.T) {
+	cfg := DefaultConfig()
+	weak := Check("a")
+	strong, delta, err := CheckIncrementalWithConfig("Xk9$mP2!vR7@nL4&wQzB", &weak, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !delta.ScoreChanged {
+		t.Error("different password: expected ScoreChanged true")
+	}
+	if !delta.IssuesChanged {
+		t.Error("different password: expected IssuesChanged true")
+	}
+	if strong.Score <= weak.Score {
+		t.Errorf("strong password score %d should be > weak %d", strong.Score, weak.Score)
+	}
+}
+
+func TestCheckIncrementalWithConfig_EquivalentToCheckWithConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 8
+	password := "MyP@ssw0rd"
+	full, err := CheckWithConfig(password, cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	inc, delta, err := CheckIncrementalWithConfig(password, nil, cfg)
+	if err != nil {
+		t.Fatalf("CheckIncrementalWithConfig: %v", err)
+	}
+	if inc.Score != full.Score {
+		t.Errorf("Score: incremental %d, CheckWithConfig %d", inc.Score, full.Score)
+	}
+	if inc.Verdict != full.Verdict {
+		t.Errorf("Verdict: incremental %q, CheckWithConfig %q", inc.Verdict, full.Verdict)
+	}
+	if !delta.ScoreChanged || !delta.IssuesChanged {
+		t.Error("nil previous should set deltas true")
+	}
+}
+
 func TestCheckWithConfig_ScoringAdaptsToMinLength(t *testing.T) {
 	cfg8 := DefaultConfig()
 	cfg8.MinLength = 8

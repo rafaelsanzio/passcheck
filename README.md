@@ -25,6 +25,7 @@ result with a score, verdict, and specific feedback.
 - **Entropy Calculation** — Shannon entropy based on character-set diversity
 - **Configurable Rules** — Adjust minimum length, character requirements, thresholds
 - **Actionable Feedback** — Prioritized issues and positive suggestions
+- **Real-Time Feedback** — `CheckIncremental` / `CheckIncrementalWithConfig` with delta for live strength meters
 - **Secure Memory** — `CheckBytes` zeros input after analysis
 - **CLI Tool** — Colored output, JSON mode, verbose mode
 - **Zero Dependencies** — Only the Go standard library
@@ -149,6 +150,42 @@ func CheckBytes(password []byte) Result
 
 // Check from a []byte with custom configuration.
 func CheckBytesWithConfig(password []byte, cfg Config) (Result, error)
+```
+
+### Real-Time Feedback
+
+For password strength meters and live feedback as the user types, use the incremental API. Pass the previous result so you can compare or use the returned delta to skip redundant UI updates.
+
+```go
+// Simple form: same as Check when previous is nil.
+var lastResult *passcheck.Result
+func onPasswordChange(password string) {
+    result := passcheck.CheckIncremental(password, lastResult)
+    updateMeter(result.Score, result.Issues)
+    lastResult = &result
+}
+
+// With custom config and delta (skip UI update when nothing changed).
+result, delta, _ := passcheck.CheckIncrementalWithConfig(password, lastResult, cfg)
+if delta.ScoreChanged || delta.IssuesChanged {
+    updateMeter(result.Score, result.Issues)
+}
+lastResult = &result
+```
+
+**Debouncing:** When calling on every keystroke, debounce input (e.g. 100–300 ms) to limit CPU usage and keep the UI responsive.
+
+```go
+// Incremental API
+func CheckIncremental(password string, previous *Result) Result
+func CheckIncrementalWithConfig(password string, previous *Result, cfg Config) (Result, IncrementalDelta, error)
+
+// IncrementalDelta indicates what changed vs. the previous result
+type IncrementalDelta struct {
+    ScoreChanged        bool  // score differs from previous
+    IssuesChanged       bool  // issues list differs
+    SuggestionsChanged  bool  // suggestions list differs
+}
 ```
 
 ### Result
@@ -343,7 +380,7 @@ truncated.
 
 ```
 passcheck/
-├── passcheck.go        # Public API: Check, CheckWithConfig, CheckBytes
+├── passcheck.go        # Public API: Check, CheckIncremental, CheckWithConfig, CheckBytes
 ├── config.go           # Config struct, DefaultConfig, Validate
 ├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
 ├── middleware/         # HTTP middleware (net/http, Chi, Echo, Gin, Fiber)
