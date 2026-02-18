@@ -15,6 +15,7 @@ const (
 	CategoryPattern    = "pattern"
 	CategoryDictionary = "dictionary"
 	CategoryContext    = "context"
+	CategoryBreach     = "breach"
 )
 
 // Issue codes — stable identifiers for programmatic handling.
@@ -43,6 +44,9 @@ const (
 
 	// Context
 	CodeContextWord = "CONTEXT_WORD"
+
+	// HIBP (Have I Been Pwned)
+	CodeHIBPBreached = "HIBP_BREACHED"
 )
 
 // Issue represents a single finding from a password check.

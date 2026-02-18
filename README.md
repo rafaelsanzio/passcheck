@@ -21,6 +21,7 @@ result with a score, verdict, and specific feedback.
 - **Context-Aware Detection** — Reject passwords containing username, email, or custom words
 - **Policy Presets** — NIST, PCI-DSS, OWASP, Enterprise, UserFriendly in one call
 - **Custom Blocklists** — Add organization-specific passwords and words via config
+- **Breach Database (HIBP)** — Optional [Have I Been Pwned](https://haveibeenpwned.com/) integration via k-anonymity (only 5-char hash prefix sent)
 - **HTTP Middleware** — Drop-in middleware for net/http (Chi, Echo, Gin, Fiber with optional build tags)
 - **Entropy Calculation** — Shannon entropy based on character-set diversity
 - **Configurable Rules** — Adjust minimum length, character requirements, thresholds
@@ -28,7 +29,7 @@ result with a score, verdict, and specific feedback.
 - **Real-Time Feedback** — `CheckIncremental` / `CheckIncrementalWithConfig` with delta for live strength meters
 - **Secure Memory** — `CheckBytes` zeros input after analysis
 - **CLI Tool** — Colored output, JSON mode, verbose mode
-- **Zero Dependencies** — Only the Go standard library
+- **Zero Dependencies** — Root library: stdlib only; optional [hibp](hibp/) package for breach checks
 
 For upgrade instructions from v1.0.0 (e.g. `Result.Issues` type change, new presets and middleware), see [MIGRATION.md](MIGRATION.md).
 
@@ -200,9 +201,9 @@ type Result struct {
 }
 
 type Issue struct {
-    Code     string // e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD"
+    Code     string // e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD", "HIBP_BREACHED"
     Message  string // Human-readable description
-    Category string // "rule", "pattern", "dictionary", "context"
+    Category string // "rule", "pattern", "dictionary", "context", "breach"
     Severity int    // 1 (low) – 3 (high)
 }
 ```
@@ -253,6 +254,8 @@ if err != nil {
 | `CustomWords`      | `[]string` | nil | Additional words to detect as substrings   |
 | `ContextWords`     | `[]string` | nil | User-specific terms (username, email, etc.) to reject in passwords |
 | `DisableLeet`      | `bool` | false   | Disable leetspeak normalization in dictionary checks |
+| `HIBPChecker`      | `HIBPChecker` | nil | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp) |
+| `HIBPMinOccurrences` | `int` | 1 | Min breach count to report (only when `HIBPChecker` is set) |
 
 ### Custom Blocklists
 
@@ -280,6 +283,34 @@ result, _ := passcheck.CheckWithConfig("John123!", cfg)      // issue: contains 
 ```
 
 Words shorter than 3 characters are ignored. Use with registration or password-change flows to prevent passwords derived from personal data.
+
+### Breach database (HIBP)
+
+Check passwords against the [Have I Been Pwned](https://haveibeenpwned.com/) (HIBP) breach database using **k-anonymity**: only the first 5 characters of the password’s SHA-1 hash are sent to the API; the full password and full hash are never transmitted.
+
+Use the [hibp](hibp/) package and set `Config.HIBPChecker`:
+
+```go
+import (
+    "github.com/rafaelsanzio/passcheck"
+    "github.com/rafaelsanzio/passcheck/hibp"
+)
+
+cfg := passcheck.DefaultConfig()
+client := hibp.NewClient()
+client.Cache = hibp.NewMemoryCacheWithTTL(256, hibp.DefaultCacheTTL)
+cfg.HIBPChecker = client
+cfg.HIBPMinOccurrences = 1
+
+result, _ := passcheck.CheckWithConfig(password, cfg)
+for _, iss := range result.Issues {
+    if iss.Code == passcheck.CodeHIBPBreached {
+        // Password was found in a breach
+    }
+}
+```
+
+On network or API errors, the breach check is skipped and the rest of the result is still returned (graceful degradation). See [examples/hibp](examples/hibp/) and the [hibp package](hibp/) for details.
 
 ### Disabling Leet Normalization
 
@@ -371,8 +402,8 @@ truncated.
 - The Go runtime may retain copies of string data in CPU caches, swap, or core
   dumps. `CheckBytes` reduces — but does not eliminate — the window of exposure.
 - The built-in dictionary contains ~950 common passwords and ~490 common
-  words. Production deployments may want to complement this with
-  external breach databases (e.g. Have I Been Pwned).
+  words. For breach detection, use the optional [hibp](hibp/) package
+  (k-anonymity; see [Breach database (HIBP)](#breach-database-hibp)).
 - Entropy is estimated from character-set diversity and length, not from the
   full distribution of possible passwords.
 
@@ -383,6 +414,7 @@ passcheck/
 ├── passcheck.go        # Public API: Check, CheckIncremental, CheckWithConfig, CheckBytes
 ├── config.go           # Config struct, DefaultConfig, Validate
 ├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
+├── hibp/               # Optional HIBP breach API client (k-anonymity)
 ├── middleware/         # HTTP middleware (net/http, Chi, Echo, Gin, Fiber)
 ├── internal/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats

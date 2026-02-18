@@ -19,6 +19,12 @@
 //	cfg.RequireSymbol = false
 //	result, err := passcheck.CheckWithConfig("mypassword", cfg)
 //
+// # Breach database (optional)
+//
+// Set [Config.HIBPChecker] to a client from the [hibp] package to check
+// passwords against the Have I Been Pwned API (k-anonymity; only a 5-char
+// hash prefix is sent). On API errors, the check is skipped.
+//
 // # Real-time feedback
 //
 // For password strength meters and live feedback, use [CheckIncremental] or
@@ -51,6 +57,7 @@ import (
 	"github.com/rafaelsanzio/passcheck/internal/dictionary"
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/patterns"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 	"github.com/rafaelsanzio/passcheck/internal/safemem"
@@ -90,6 +97,7 @@ const (
 	CodeDictLeetVariant     = "DICT_LEET_VARIANT"
 	CodeDictCommonWord      = "DICT_COMMON_WORD"
 	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
+	CodeHIBPBreached        = "HIBP_BREACHED"
 )
 
 // Issue represents a single finding from a password check.
@@ -212,6 +220,25 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		Patterns:   patterns.CheckWith(pw, patternsOpts),
 		Dictionary: dictionary.CheckWith(pw, dictOpts),
 		Context:    context.CheckWith(pw, contextOpts),
+	}
+
+	// Optional HIBP breach check (graceful degradation on error).
+	if cfg.HIBPChecker != nil {
+		breached, count, err := cfg.HIBPChecker.Check(password)
+		if err == nil && breached {
+			minOcc := cfg.HIBPMinOccurrences
+			if minOcc < 1 {
+				minOcc = 1
+			}
+			if count >= minOcc {
+				issueSet.HIBP = append(issueSet.HIBP, issue.New(
+					issue.CodeHIBPBreached,
+					"Password has been found in a data breach.",
+					issue.CategoryBreach,
+					issue.SeverityHigh,
+				))
+			}
+		}
 	}
 
 	// Entropy calculation

@@ -1,6 +1,7 @@
 package passcheck
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -562,6 +563,83 @@ func TestCheckIncrementalWithConfig_EquivalentToCheckWithConfig(t *testing.T) {
 	}
 	if !delta.ScoreChanged || !delta.IssuesChanged {
 		t.Error("nil previous should set deltas true")
+	}
+}
+
+// mockHIBP implements the HIBPChecker interface for tests (no hibp import).
+type mockHIBP struct {
+	breached bool
+	count    int
+	err      error
+}
+
+func (m *mockHIBP) Check(_ string) (bool, int, error) {
+	return m.breached, m.count, m.err
+}
+
+func TestCheckWithConfig_HIBP_AddsIssueWhenBreached(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.HIBPChecker = &mockHIBP{breached: true, count: 10}
+	cfg.HIBPMinOccurrences = 1
+
+	result, err := CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	var found bool
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected HIBP_BREACHED issue when checker reports breached")
+	}
+}
+
+func TestCheckWithConfig_HIBP_RespectsMinOccurrences(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.HIBPChecker = &mockHIBP{breached: true, count: 1}
+	cfg.HIBPMinOccurrences = 10
+
+	result, err := CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			t.Error("expected no HIBP issue when count < HIBPMinOccurrences")
+		}
+	}
+}
+
+func TestCheckWithConfig_HIBP_GracefulDegradationOnError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.HIBPChecker = &mockHIBP{err: fmt.Errorf("network error")}
+
+	result, err := CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	// Should still return a valid result (no HIBP issue when checker errors).
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			t.Error("expected no HIBP issue when checker returns error")
+		}
+	}
+}
+
+func TestCheckWithConfig_HIBP_NilChecker_NoIssue(t *testing.T) {
+	cfg := DefaultConfig()
+	result, _ := CheckWithConfig("password", cfg)
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			t.Error("default config has no HIBP checker; should not have HIBP issue")
+		}
 	}
 }
 
