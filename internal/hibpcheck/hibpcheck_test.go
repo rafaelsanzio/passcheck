@@ -17,11 +17,11 @@ func (m *mockChecker) Check(password string) (bool, int, error) {
 
 func TestCheckWith(t *testing.T) {
 	tests := []struct {
-		name        string
-		password    string
-		opts        Options
-		wantIssues  int
-		wantCode    string
+		name       string
+		password   string
+		opts       Options
+		wantIssues int
+		wantCode   string
 	}{
 		{
 			name:     "breached from result",
