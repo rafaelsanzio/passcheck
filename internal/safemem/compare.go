@@ -49,7 +49,7 @@ func constantTimeCompareByte(a, b string) int {
 // constantTimeIntEqZero returns 1 if x == 0, 0 otherwise, in constant time.
 func constantTimeIntEqZero(x int) int {
 	eq := 1
-	for i := 0; i < 8; i++ {
+	for i := range [8]int{} {
 		eq &= subtle.ConstantTimeByteEq(byte(x>>(i*8)), 0)
 	}
 	return eq

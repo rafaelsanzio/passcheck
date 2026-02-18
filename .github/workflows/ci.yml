@@ -24,11 +24,12 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      # Install golangci-lint with current Go so it matches the toolchain (avoids go1.26 vs binary mismatch)
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+        run: golangci-lint run --timeout=5m
 
   # ─── Test ──────────────────────────────────────────────────────────────────
   test:
