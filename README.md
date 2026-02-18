@@ -256,6 +256,8 @@ if err != nil {
 | `DisableLeet`      | `bool` | false   | Disable leetspeak normalization in dictionary checks |
 | `HIBPChecker`      | `HIBPChecker` | nil | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp) |
 | `HIBPMinOccurrences` | `int` | 1 | Min breach count to report (only when `HIBPChecker` is set) |
+| `ConstantTimeMode` | `bool` | false | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
+| `MinExecutionTimeMs` | `int` | 0 | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration |
 
 ### Custom Blocklists
 

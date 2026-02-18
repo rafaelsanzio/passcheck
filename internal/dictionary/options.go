@@ -21,6 +21,12 @@ type Options struct {
 	//
 	// Default: false (leet normalization enabled).
 	DisableLeet bool
+
+	// ConstantTime, when true, uses constant-time string comparison and
+	// substring checks so that execution time does not leak whether the
+	// password matched a blocklist entry or where it matched. Slower than
+	// normal lookups. Default: false.
+	ConstantTime bool
 }
 
 // DefaultOptions returns the recommended dictionary options.

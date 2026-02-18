@@ -1,5 +1,7 @@
 package dictionary
 
+import "github.com/rafaelsanzio/passcheck/internal/safemem"
+
 // commonPasswordsList is the canonical list of well-known weak passwords
 // compiled from public breach data (RockYou, LinkedIn, Adobe, etc.) and
 // security research. Approximately 1 000 entries.
@@ -270,9 +272,12 @@ func isCommonPassword(password string) bool {
 }
 
 // isCommonPasswordIn reports whether password appears in the built-in set
-// OR in the extra custom list. The custom list is checked via linear scan
-// which is acceptable for typical blocklist sizes (< 10 000).
-func isCommonPasswordIn(password string, custom []string) bool {
+// OR in the extra custom list. When constantTime is true, all comparisons
+// use constant-time equality so timing does not leak match position.
+func isCommonPasswordIn(password string, custom []string, constantTime bool) bool {
+	if constantTime {
+		return isCommonPasswordInConstantTime(password, custom)
+	}
 	if commonPasswords[password] {
 		return true
 	}
@@ -282,4 +287,16 @@ func isCommonPasswordIn(password string, custom []string) bool {
 		}
 	}
 	return false
+}
+
+// isCommonPasswordInConstantTime does a linear scan with constant-time compare.
+func isCommonPasswordInConstantTime(password string, custom []string) bool {
+	var found int
+	for _, p := range commonPasswordsList {
+		found |= safemem.ConstantTimeEqual(password, p)
+	}
+	for _, p := range custom {
+		found |= safemem.ConstantTimeEqual(password, p)
+	}
+	return found == 1
 }

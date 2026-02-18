@@ -1,6 +1,11 @@
 package dictionary
 
-import "sort"
+import (
+	"sort"
+	"strings"
+
+	"github.com/rafaelsanzio/passcheck/internal/safemem"
+)
 
 // DefaultMinWordLen is the minimum length of a dictionary word considered
 // for substring matching. Shorter words produce too many false positives
@@ -170,12 +175,14 @@ func init() {
 }
 
 // findCommonWords returns all common dictionary words that appear as
-// substrings of password. Words are checked longest-first; if a long
-// word matches, shorter words that are substrings of it are skipped to
-// reduce noise.
+// substrings of password. When constantTime is true, uses constant-time
+// substring checks so timing does not leak match position.
 //
 // password must be lowercase.
-func findCommonWords(password string) []string {
+func findCommonWords(password string, constantTime bool) []string {
+	if constantTime {
+		return findCommonWordsInConstantTime(password, commonWords)
+	}
 	return findCommonWordsIn(password, commonWords)
 }
 
@@ -214,9 +221,9 @@ func findCommonWordsIn(password string, words []string) []string {
 
 // findCommonWordsWithCustom merges custom words into the default word list,
 // sorts the combined list longest-first, and performs substring matching.
-func findCommonWordsWithCustom(password string, custom []string) []string {
+func findCommonWordsWithCustom(password string, custom []string, constantTime bool) []string {
 	if len(custom) == 0 {
-		return findCommonWordsIn(password, commonWords)
+		return findCommonWords(password, constantTime)
 	}
 
 	// Merge: default + filtered custom words.
@@ -228,12 +235,64 @@ func findCommonWordsWithCustom(password string, custom []string) []string {
 		}
 	}
 
-	// Re-sort longest-first for correct coverage logic.
+	// Re-sort longest-first for correct coverage logic (when not constant-time).
 	sort.Slice(merged, func(i, j int) bool {
 		return len(merged[i]) > len(merged[j])
 	})
 
+	if constantTime {
+		return findCommonWordsInConstantTime(password, merged)
+	}
 	return findCommonWordsIn(password, merged)
+}
+
+// findCommonWordsInConstantTime reports every word in words that appears as
+// a substring of password, using constant-time contains so timing does not leak.
+// It filters the result so that no reported word is a substring of another
+// (keeps "maximal" matches only), matching the semantics of findCommonWordsIn
+// which uses coverage and longest-first to avoid reporting overlapping substrings.
+func findCommonWordsInConstantTime(password string, words []string) []string {
+	if len(password) < DefaultMinWordLen {
+		return nil
+	}
+	var matches []string
+	for _, word := range words {
+		if len(word) > len(password) {
+			continue
+		}
+		if safemem.ConstantTimeContains(password, word) {
+			matches = append(matches, word)
+		}
+	}
+	return filterToMaximalMatches(matches)
+}
+
+// filterToMaximalMatches returns only words that are not a proper substring of
+// any other word in the slice. Ties (same length) are kept so we preserve
+// the same logical set as the normal path's coverage-based reporting.
+func filterToMaximalMatches(matches []string) []string {
+	if len(matches) <= 1 {
+		return matches
+	}
+	// Sort by length descending so we keep longer words and drop shorter ones
+	// that are substrings of a longer match.
+	sort.Slice(matches, func(i, j int) bool {
+		return len(matches[i]) > len(matches[j])
+	})
+	var kept []string
+	for _, w := range matches {
+		isSubstring := false
+		for _, k := range kept {
+			if len(k) > len(w) && strings.Contains(k, w) {
+				isSubstring = true
+				break
+			}
+		}
+		if !isSubstring {
+			kept = append(kept, w)
+		}
+	}
+	return kept
 }
 
 // indexOfSubstring returns the index of the first occurrence of substr

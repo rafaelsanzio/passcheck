@@ -216,7 +216,7 @@ func TestFindCommonWords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			words := findCommonWords(tt.password)
+			words := findCommonWords(tt.password, false)
 			if len(words) != tt.wantLen {
 				t.Errorf("findCommonWords(%q): got %d words, want %d (%v)",
 					tt.password, len(words), tt.wantLen, words)
@@ -228,7 +228,7 @@ func TestFindCommonWords(t *testing.T) {
 func TestFindCommonWords_CoverageSkipsSubstrings(t *testing.T) {
 	// "football" should be found; "foot" (even if it were in the list)
 	// should be skipped because the region is already covered.
-	words := findCommonWords("football")
+	words := findCommonWords("football", false)
 	if len(words) != 1 {
 		t.Errorf("expected 1 word, got %d: %v", len(words), words)
 	}
@@ -662,23 +662,39 @@ func TestWordList_SizeAtLeast250(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestIsCommonPasswordIn_BuiltInOnly(t *testing.T) {
-	if !isCommonPasswordIn("password", nil) {
+	if !isCommonPasswordIn("password", nil, false) {
 		t.Error("expected 'password' to match built-in list")
 	}
-	if isCommonPasswordIn("totallynotapassword", nil) {
+	if isCommonPasswordIn("totallynotapassword", nil, false) {
 		t.Error("expected no match for random string")
+	}
+}
+
+func TestIsCommonPasswordIn_ConstantTimeSameResult(t *testing.T) {
+	// Constant-time and normal mode must return the same logical result.
+	passwords := []string{"password", "totallynotapassword", "admin", "qwerty"}
+	custom := []string{"mycompany"}
+	for _, pw := range passwords {
+		gotNorm := isCommonPasswordIn(pw, custom, false)
+		gotConst := isCommonPasswordIn(pw, custom, true)
+		if gotNorm != gotConst {
+			t.Errorf("password %q: normal=%v constantTime=%v (must match)", pw, gotNorm, gotConst)
+		}
+	}
+	if !isCommonPasswordIn("mycompany", custom, false) || !isCommonPasswordIn("mycompany", custom, true) {
+		t.Error("custom password 'mycompany' should match in both modes")
 	}
 }
 
 func TestIsCommonPasswordIn_CustomList(t *testing.T) {
 	custom := []string{"mycompanyname", "internalproject"}
-	if !isCommonPasswordIn("mycompanyname", custom) {
+	if !isCommonPasswordIn("mycompanyname", custom, false) {
 		t.Error("expected 'mycompanyname' to match custom list")
 	}
-	if !isCommonPasswordIn("password", custom) {
+	if !isCommonPasswordIn("password", custom, false) {
 		t.Error("expected 'password' to still match built-in list")
 	}
-	if isCommonPasswordIn("randomstring", custom) {
+	if isCommonPasswordIn("randomstring", custom, false) {
 		t.Error("expected no match for random string")
 	}
 }
@@ -689,7 +705,7 @@ func TestIsCommonPasswordIn_CustomList(t *testing.T) {
 
 func TestFindCommonWordsWithCustom(t *testing.T) {
 	custom := []string{"acmecorp", "widgetron"}
-	matches := findCommonWordsWithCustom("iloveacmecorp", custom)
+	matches := findCommonWordsWithCustom("iloveacmecorp", custom, false)
 	found := false
 	for _, m := range matches {
 		if m == "acmecorp" {
@@ -703,8 +719,8 @@ func TestFindCommonWordsWithCustom(t *testing.T) {
 
 func TestFindCommonWordsWithCustom_EmptyCustom(t *testing.T) {
 	// Should behave same as findCommonWords.
-	matches := findCommonWordsWithCustom("mydragonpass", nil)
-	matchesDefault := findCommonWords("mydragonpass")
+	matches := findCommonWordsWithCustom("mydragonpass", nil, false)
+	matchesDefault := findCommonWords("mydragonpass", false)
 	if len(matches) != len(matchesDefault) {
 		t.Errorf("empty custom should match default: got %d vs %d",
 			len(matches), len(matchesDefault))
