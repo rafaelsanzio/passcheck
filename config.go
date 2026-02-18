@@ -48,13 +48,13 @@ type Config struct {
 
 	// CustomPasswords is an optional list of additional passwords to check
 	// against during dictionary checks. Entries are matched case-insensitively.
-	// Nil or empty means use only the built-in list (~1 000 common passwords).
+	// Nil or empty means use only the built-in common password list.
 	CustomPasswords []string
 
 	// CustomWords is an optional list of additional words to detect as
 	// substrings during dictionary checks. Entries are matched
 	// case-insensitively. Words shorter than 4 characters are ignored.
-	// Nil or empty means use only the built-in list (~350 common words).
+	// Nil or empty means use only the built-in common word list.
 	CustomWords []string
 
 	// ContextWords is an optional list of user-specific terms to detect
