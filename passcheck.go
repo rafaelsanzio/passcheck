@@ -99,6 +99,7 @@ const (
 	CodeDictCommonWord      = "DICT_COMMON_WORD"
 	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
 	CodeHIBPBreached        = "HIBP_BREACHED"
+	CodeContextWord         = "CONTEXT_WORD"
 )
 
 // Issue represents a single finding from a password check.
