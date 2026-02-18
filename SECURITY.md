@@ -42,6 +42,9 @@ The following items have been reviewed for the v1.0.0 release:
 - [x] **Timing attack mitigation (optional)**: `ConstantTimeMode` and
   `MinExecutionTimeMs` provide constant-time dictionary lookups and
   execution-time padding when enabled; see [Timing attack protection](#timing-attack-protection-optional).
+- [x] **WebAssembly (browser) build**: The [wasm](wasm/README.md) build runs entirely in the
+  browser; the password is never sent to the server by this library. Optional HIBP
+  (when enabled via config) calls the HIBP API from the browser (k-anonymity); CORS may block it in some environments.
 
 ## Timing attack protection (optional)
 
@@ -77,6 +80,7 @@ can measure response time (e.g. remote timing), enable timing-attack mitigations
 
 ## Limitations
 
+- The WebAssembly build can optionally use HIBP when `config.useHibp` is set; the request runs in the browser and may be blocked by CORS. For guaranteed breach checking, use the server-side API.
 - Go strings are immutable and garbage-collected. The runtime may retain copies
   of string data in CPU caches, swap, or core dumps. `CheckBytes` reduces but
   does not eliminate the window of exposure.

@@ -29,6 +29,20 @@ PLATFORMS := \
 	darwin/arm64 \
 	windows/amd64
 
+
+.PHONY: wasm
+wasm: wasm ## Build WASM and copy to wasm/web/public/ for the modern web app.
+	@mkdir -p wasm/web/public
+	@cp $(BIN_DIR)/passcheck.wasm wasm/web/public/ 2>/dev/null || true
+	@cp $(BIN_DIR)/wasm_exec.js wasm/web/public/ 2>/dev/null || true
+	@echo "  copied WASM files to wasm/web/public/"
+	@echo "  Run 'cd wasm/web && npm install && npm run dev' to start the development server"
+
+.PHONY: serve-wasm
+serve-wasm: wasm ## Build WASM web app and start Vite dev server (requires Node.js and npm).
+	@echo "Starting Vite dev server for wasm/web..."
+	@cd wasm/web && npm install && npm run dev
+
 .PHONY: cross
 cross: ## Cross-compile for all supported platforms.
 	@for platform in $(PLATFORMS); do \

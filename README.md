@@ -29,6 +29,7 @@ result with a score, verdict, and specific feedback.
 - **Real-Time Feedback** — `CheckIncremental` / `CheckIncrementalWithConfig` with delta for live strength meters
 - **Secure Memory** — `CheckBytes` zeros input after analysis
 - **CLI Tool** — Colored output, JSON mode, verbose mode
+- **WebAssembly (browser)** — [WASM build](wasm/README.md) for client-side validation with no server round-trip. Includes both a simple HTML example and a [modern TypeScript/Vite web app](wasm/web/README.md)
 - **Zero Dependencies** — Root library: stdlib only; optional [hibp](hibp/) package for breach checks
 
 For upgrade instructions from v1.0.0 (e.g. `Result.Issues` type change, new presets and middleware), see [MIGRATION.md](MIGRATION.md).
@@ -54,6 +55,8 @@ git clone https://github.com/rafaelsanzio/passcheck.git
 cd passcheck
 make build       # builds to bin/passcheck
 make install     # installs to $GOPATH/bin
+make wasm    # builds WASM and copies to wasm/web/public/ for the modern web app
+make serve-wasm # starts the modern TypeScript/Vite web app (requires Node.js)
 ```
 
 ## Quick Start
@@ -240,24 +243,24 @@ if err != nil {
 
 ### Config Fields
 
-| Field              | Type   | Default | Description                                |
-| ------------------ | ------ | ------- | ------------------------------------------ |
-| `MinLength`        | `int`  | 12      | Minimum runes required                     |
-| `RequireUpper`     | `bool` | true    | Require uppercase letter                   |
-| `RequireLower`     | `bool` | true    | Require lowercase letter                   |
-| `RequireDigit`     | `bool` | true    | Require numeric digit                      |
-| `RequireSymbol`    | `bool` | true    | Require symbol character                   |
-| `MaxRepeats`       | `int`  | 3       | Max consecutive identical characters       |
-| `PatternMinLength` | `int`  | 4       | Min length for keyboard/sequence detection |
-| `MaxIssues`        | `int`  | 5       | Max issues returned (0 = no limit)         |
-| `CustomPasswords`  | `[]string` | nil | Additional passwords to block (case-insensitive) |
-| `CustomWords`      | `[]string` | nil | Additional words to detect as substrings   |
-| `ContextWords`     | `[]string` | nil | User-specific terms (username, email, etc.) to reject in passwords |
-| `DisableLeet`      | `bool` | false   | Disable leetspeak normalization in dictionary checks |
-| `HIBPChecker`      | `HIBPChecker` | nil | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp) |
-| `HIBPMinOccurrences` | `int` | 1 | Min breach count to report (only when `HIBPChecker` is set) |
-| `ConstantTimeMode` | `bool` | false | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
-| `MinExecutionTimeMs` | `int` | 0 | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration |
+| Field                | Type          | Default | Description                                                                                                                           |
+| -------------------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinLength`          | `int`         | 12      | Minimum runes required                                                                                                                |
+| `RequireUpper`       | `bool`        | true    | Require uppercase letter                                                                                                              |
+| `RequireLower`       | `bool`        | true    | Require lowercase letter                                                                                                              |
+| `RequireDigit`       | `bool`        | true    | Require numeric digit                                                                                                                 |
+| `RequireSymbol`      | `bool`        | true    | Require symbol character                                                                                                              |
+| `MaxRepeats`         | `int`         | 3       | Max consecutive identical characters                                                                                                  |
+| `PatternMinLength`   | `int`         | 4       | Min length for keyboard/sequence detection                                                                                            |
+| `MaxIssues`          | `int`         | 5       | Max issues returned (0 = no limit)                                                                                                    |
+| `CustomPasswords`    | `[]string`    | nil     | Additional passwords to block (case-insensitive)                                                                                      |
+| `CustomWords`        | `[]string`    | nil     | Additional words to detect as substrings                                                                                              |
+| `ContextWords`       | `[]string`    | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
+| `DisableLeet`        | `bool`        | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
+| `HIBPChecker`        | `HIBPChecker` | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
+| `HIBPMinOccurrences` | `int`         | 1       | Min breach count to report (only when `HIBPChecker` is set)                                                                           |
+| `ConstantTimeMode`   | `bool`        | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
+| `MinExecutionTimeMs` | `int`         | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
 
 ### Custom Blocklists
 
@@ -329,13 +332,13 @@ cfg.DisableLeet = true
 
 Use standard-based presets instead of building config from scratch:
 
-| Preset | Use case | Min length | Complexity |
-|--------|----------|------------|------------|
-| `NISTConfig()` | NIST SP 800-63B (length over composition) | 8 | None |
-| `UserFriendlyConfig()` | Consumer apps, low friction | 10 | Lower + digit |
-| `OWASPConfig()` | Web apps, SaaS (OWASP recommendations) | 10 | Upper + lower + digit |
-| `PCIDSSConfig()` | PCI-DSS v4.0 (payment card systems) | 12 | Full |
-| `EnterpriseConfig()` | High-security / enterprise | 14 | Full, strict |
+| Preset                 | Use case                                  | Min length | Complexity            |
+| ---------------------- | ----------------------------------------- | ---------- | --------------------- |
+| `NISTConfig()`         | NIST SP 800-63B (length over composition) | 8          | None                  |
+| `UserFriendlyConfig()` | Consumer apps, low friction               | 10         | Lower + digit         |
+| `OWASPConfig()`        | Web apps, SaaS (OWASP recommendations)    | 10         | Upper + lower + digit |
+| `PCIDSSConfig()`       | PCI-DSS v4.0 (payment card systems)       | 12         | Full                  |
+| `EnterpriseConfig()`   | High-security / enterprise                | 14         | Full, strict          |
 
 ```go
 // NIST: length and dictionary only, no composition rules
@@ -356,6 +359,22 @@ Each preset is documented in godoc with standard references (NIST SP 800-63B, PC
 - Need slightly looser for better UX? Use `OWASPConfig()` (symbols optional) or `UserFriendlyConfig()` (min 10, fewer requirements).
 
 You can still override after calling a preset, e.g. `cfg := passcheck.NISTConfig(); cfg.CustomPasswords = myList`.
+
+### WebAssembly (client-side)
+
+For instant client-side feedback in the browser without a server round-trip, use the WebAssembly build. There are two options:
+
+#### Modern TypeScript/Vite Web App
+
+The [modern web application](wasm/web/README.md) provides a premium UI with TypeScript, Vite, and Web Workers for optimal performance. Build with `make wasm-web`, then start the dev server with `make serve-wasm-web` (or `cd wasm/web && npm install && npm run dev`). Features include:
+
+- **Modern UI**: Dark mode interface with real-time feedback
+- **TypeScript**: Type-safe client code
+- **Web Workers**: Non-blocking password checks
+- **Configurable Rules**: Full configuration panel with presets
+- **HIBP Integration**: Secure breach database checks
+
+See [wasm/web/README.md](wasm/web/README.md) for installation and usage instructions.
 
 ### HTTP Middleware
 
@@ -446,16 +465,16 @@ and bonuses (length + character-set diversity) into a 0-100 score.
 Benchmarks run on Apple Silicon (M-series), Go 1.21+. Results vary by
 hardware but relative magnitudes are representative.
 
-| Input | Time | Allocs | Bytes |
-|-------|------|--------|-------|
-| Empty password | ~420 ns | 7 | 184 B |
-| Short (6 chars) | ~1.0 µs | 20 | 923 B |
-| Common password | ~4.1 µs | 38 | 1.6 KB |
-| Medium (12 chars) | ~12 µs | 52 | 872 B |
-| Strong (20 chars) | ~23 µs | 95 | 1.3 KB |
-| Long (100 chars) | ~137 µs | 598 | 10 KB |
-| Very long (1000 chars) | ~1.4 ms | 5999 | 89 KB |
-| Unicode (20 chars) | ~26 µs | 58 | 1.2 KB |
+| Input                  | Time    | Allocs | Bytes  |
+| ---------------------- | ------- | ------ | ------ |
+| Empty password         | ~420 ns | 7      | 184 B  |
+| Short (6 chars)        | ~1.0 µs | 20     | 923 B  |
+| Common password        | ~4.1 µs | 38     | 1.6 KB |
+| Medium (12 chars)      | ~12 µs  | 52     | 872 B  |
+| Strong (20 chars)      | ~23 µs  | 95     | 1.3 KB |
+| Long (100 chars)       | ~137 µs | 598    | 10 KB  |
+| Very long (1000 chars) | ~1.4 ms | 5999   | 89 KB  |
+| Unicode (20 chars)     | ~26 µs  | 58     | 1.2 KB |
 
 ### Performance characteristics
 

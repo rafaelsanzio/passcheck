@@ -2,6 +2,13 @@ package passcheck
 
 import "fmt"
 
+// HIBPCheckResult is a pre-computed result from an HIBP (Have I Been Pwned) lookup.
+// When Config.HIBPResult is set, the library uses it instead of calling HIBPChecker.
+type HIBPCheckResult struct {
+	Breached bool
+	Count    int
+}
+
 // Config holds configuration options for password strength checking.
 //
 // Use [DefaultConfig] to obtain a Config with recommended defaults, then
@@ -76,9 +83,15 @@ type Config struct {
 	}
 
 	// HIBPMinOccurrences is the minimum breach count required to report
-	// an HIBP_BREACHED issue. Only used when HIBPChecker is set.
+	// an HIBP_BREACHED issue. Only used when HIBPChecker or HIBPResult is set.
 	// Default: 1 (report if found in any breach).
 	HIBPMinOccurrences int
+
+	// HIBPResult, when non-nil, is used instead of calling HIBPChecker. This
+	// allows callers (e.g. browser WASM) to perform the HIBP lookup outside Go
+	// and pass the result in, avoiding blocking or CORS issues. When set,
+	// HIBPChecker is ignored for this check.
+	HIBPResult *HIBPCheckResult
 
 	// ConstantTimeMode, when true, uses constant-time string comparison and
 	// substring checks in dictionary lookups so that response time does not
