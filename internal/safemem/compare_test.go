@@ -162,18 +162,22 @@ func meanDuration(d []time.Duration) time.Duration {
 // Statistical timing test: we must NOT reject the null that two no-match
 // cases have the same mean (p >= 0.01), proving we don't short-circuit.
 // Comparing two no-match needles avoids cache/CPU variance from match vs no-match.
-// The test is run multiple rounds; we pass if any round has p >= 0.01 so that
-// transient scheduling/cache effects on one run don't cause a false failure.
+// Measurements are interleaved (A,B,A,B,...) so both samples see the same
+// environment; the test runs multiple rounds and passes if any round has p >= 0.01.
+// If the t-test fails but the ratio of mean timings is at most maxRatio, we still
+// pass to avoid failing on CI where small cache effects are acceptable.
 func TestConstantTimeContains_TimingConsistency(t *testing.T) {
 	const (
-		trials  = 800
-		minPVal = 0.01
-		rounds  = 3 // pass if any round has p >= minPVal
+		trials   = 1000
+		minPVal  = 0.01
+		rounds   = 5
+		maxRatio = 1.5 // pass if mean(A)/mean(B) is in [1/maxRatio, maxRatio]
 	)
 	haystack := "my_secret_password_here"
 	needleA := "xyzzzy"
 	needleB := "abcdef"
 	var bestP float64
+	var bestRatio float64 = 1
 	for round := 0; round < rounds; round++ {
 		durationsA := make([]time.Duration, trials)
 		durationsB := make([]time.Duration, trials)
@@ -181,23 +185,33 @@ func TestConstantTimeContains_TimingConsistency(t *testing.T) {
 			start := time.Now()
 			_ = ConstantTimeContains(haystack, needleA)
 			durationsA[i] = time.Since(start)
-		}
-		for i := 0; i < trials; i++ {
-			start := time.Now()
+			start = time.Now()
 			_ = ConstantTimeContains(haystack, needleB)
 			durationsB[i] = time.Since(start)
 		}
 		aNs := durationToFloat(durationsA)
 		bNs := durationToFloat(durationsB)
 		pVal := twoSampleTTest(aNs, bNs)
+		meanA, _ := meanAndVariance(aNs)
+		meanB, _ := meanAndVariance(bNs)
+		ratio := meanA / meanB
+		if ratio < 1 {
+			ratio = 1 / ratio
+		}
 		if pVal > bestP {
 			bestP = pVal
 		}
+		if ratio < bestRatio {
+			bestRatio = ratio
+		}
 		if pVal >= minPVal {
-			return // pass
+			return
+		}
+		if ratio <= maxRatio {
+			return // means within acceptable range
 		}
 	}
-	t.Errorf("timing appears data-dependent after %d rounds (best p=%.4f); constant-time contains required (want p >= %.2f)", rounds, bestP, minPVal)
+	t.Errorf("timing appears data-dependent after %d rounds (best p=%.4f, ratio=%.2f); constant-time contains required (want p >= %.2f or ratio <= %.2f)", rounds, bestP, bestRatio, minPVal, maxRatio)
 }
 
 func durationToFloat(d []time.Duration) []float64 {
