@@ -58,7 +58,7 @@ import (
 	"github.com/rafaelsanzio/passcheck/internal/dictionary"
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
-	"github.com/rafaelsanzio/passcheck/internal/issue"
+	"github.com/rafaelsanzio/passcheck/internal/hibpcheck"
 	"github.com/rafaelsanzio/passcheck/internal/patterns"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 	"github.com/rafaelsanzio/passcheck/internal/safemem"
@@ -217,31 +217,24 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		ContextWords: cfg.ContextWords,
 	}
 
+	hibpOpts := hibpcheck.Options{
+		Checker:        cfg.HIBPChecker,
+		MinOccurrences: cfg.HIBPMinOccurrences,
+	}
+	if cfg.HIBPResult != nil {
+		hibpOpts.Result = &hibpcheck.Result{
+			Breached: cfg.HIBPResult.Breached,
+			Count:    cfg.HIBPResult.Count,
+		}
+	}
+
 	// Collect issues by category for weighted scoring.
 	issueSet := scoring.IssueSet{
 		Rules:      rules.CheckWith(pw, rulesOpts),
 		Patterns:   patterns.CheckWith(pw, patternsOpts),
 		Dictionary: dictionary.CheckWith(pw, dictOpts),
 		Context:    context.CheckWith(pw, contextOpts),
-	}
-
-	// Optional HIBP breach check (graceful degradation on error).
-	if cfg.HIBPChecker != nil {
-		breached, count, err := cfg.HIBPChecker.Check(password)
-		if err == nil && breached {
-			minOcc := cfg.HIBPMinOccurrences
-			if minOcc < 1 {
-				minOcc = 1
-			}
-			if count >= minOcc {
-				issueSet.HIBP = append(issueSet.HIBP, issue.New(
-					issue.CodeHIBPBreached,
-					"Password has been found in a data breach.",
-					issue.CategoryBreach,
-					issue.SeverityHigh,
-				))
-			}
-		}
+		HIBP:       hibpcheck.CheckWith(password, hibpOpts),
 	}
 
 	// Entropy calculation

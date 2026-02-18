@@ -647,6 +647,45 @@ func TestCheckWithConfig_HIBP_NilChecker_NoIssue(t *testing.T) {
 	}
 }
 
+func TestCheckWithConfig_HIBPResult_AddsIssueWhenBreached(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.HIBPResult = &HIBPCheckResult{Breached: true, Count: 100}
+	cfg.HIBPMinOccurrences = 1
+
+	result, err := CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	var found bool
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected HIBP_BREACHED issue when HIBPResult reports breached")
+	}
+}
+
+func TestCheckWithConfig_HIBPResult_RespectsMinOccurrences(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MinLength = 6
+	cfg.HIBPResult = &HIBPCheckResult{Breached: true, Count: 5}
+	cfg.HIBPMinOccurrences = 10
+
+	result, err := CheckWithConfig("aB3!xy", cfg)
+	if err != nil {
+		t.Fatalf("CheckWithConfig: %v", err)
+	}
+	for _, iss := range result.Issues {
+		if iss.Code == CodeHIBPBreached {
+			t.Error("expected no HIBP issue when HIBPResult count < HIBPMinOccurrences")
+		}
+	}
+}
+
 func TestCheckWithConfig_ConstantTimeMode_SameResult(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.MinLength = 6
