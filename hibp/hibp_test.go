@@ -46,8 +46,8 @@ func TestCheckHash_ValidFormat_NotBreached(t *testing.T) {
 	c := NewClient()
 	c.BaseURL = server.URL
 	c.HTTPClient = server.Client()
-	// Hash prefix abc12, suffix 34... (35 chars) - we need a full 40-char hash.
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	// Hash prefix 5 chars + suffix 35 chars = 40 hex chars (SHA-1).
+	hash := "abc12" + strings.Repeat("0", 35)
 	breached, count, err := c.CheckHash(hash)
 	if err != nil {
 		t.Fatalf("CheckHash: %v", err)
@@ -112,7 +112,7 @@ func TestFetchRange_CacheHit(t *testing.T) {
 	c.HTTPClient = server.Client()
 	c.Cache = NewMemoryCacheWithTTL(10, 5*time.Minute)
 
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	_, _, _ = c.CheckHash(hash)
 	_, _, _ = c.CheckHash(hash)
 	if calls != 1 {
@@ -123,7 +123,10 @@ func TestFetchRange_CacheHit(t *testing.T) {
 func TestMockClient(t *testing.T) {
 	m := &MockClient{
 		CheckFunc: func(password string) (bool, int, error) {
-			return password == "breached", 42, nil
+			if password == "breached" {
+				return true, 42, nil
+			}
+			return false, 0, nil
 		},
 	}
 	breached, count, err := m.Check("breached")
@@ -147,7 +150,7 @@ func TestCheckHash_APIReturnsNon200(t *testing.T) {
 	c := NewClient()
 	c.BaseURL = server.URL
 	c.HTTPClient = server.Client()
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	_, _, err := c.CheckHash(hash)
 	if err == nil {
 		t.Error("expected error when API returns 500")
@@ -163,7 +166,7 @@ func TestCheckHash_APIReturns429RateLimit(t *testing.T) {
 	c := NewClient()
 	c.BaseURL = server.URL
 	c.HTTPClient = server.Client()
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	_, _, err := c.CheckHash(hash)
 	if err == nil {
 		t.Error("expected error when API returns 429")
@@ -180,7 +183,7 @@ func TestCheckHash_Timeout(t *testing.T) {
 	c := NewClient()
 	c.BaseURL = server.URL
 	c.HTTPClient = &http.Client{Timeout: 10 * time.Millisecond}
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	_, _, err := c.CheckHash(hash)
 	if err == nil {
 		t.Error("expected error on timeout")
@@ -195,7 +198,7 @@ func TestCheckHash_ConnectionFails(t *testing.T) {
 	c := NewClient()
 	c.BaseURL = baseURL
 	c.HTTPClient = &http.Client{Timeout: 100 * time.Millisecond}
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	_, _, err := c.CheckHash(hash)
 	if err == nil {
 		t.Error("expected error when connection fails")
@@ -214,7 +217,7 @@ func BenchmarkCheckHash_Cached(b *testing.B) {
 	c.BaseURL = server.URL
 	c.HTTPClient = server.Client()
 	c.Cache = NewMemoryCacheWithTTL(100, 5*time.Minute)
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 	// Prime the cache.
 	_, _, _ = c.CheckHash(hash)
 
@@ -233,7 +236,7 @@ func BenchmarkCheckHash_Uncached(b *testing.B) {
 	c := NewClient()
 	c.BaseURL = server.URL
 	c.HTTPClient = server.Client()
-	hash := "abc12" + "0000000000000000000000000000000000000"
+	hash := "abc12" + strings.Repeat("0", 35)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -90,7 +90,7 @@ func ExampleResult_IssueMessages() {
 	}
 	// Output:
 	// Issue count: 1
-	// Too short (minimum 12 characters)
+	// Password is too short (5 chars, minimum 12)
 }
 
 // ExampleCheckWithConfig_invalidConfig shows that an invalid config returns an error.
@@ -127,7 +127,7 @@ func ExampleCheckBytesWithConfig() {
 	}
 	fmt.Printf("Input zeroed: %v\n", allZero)
 	// Output:
-	// Score: 12
+	// Score: 43
 	// Input zeroed: true
 }
 
@@ -163,6 +163,9 @@ func ExampleIssue_codes() {
 	}
 	// Output:
 	// Rule: too short
+	// Other: RULE_NO_UPPER
+	// Other: RULE_NO_DIGIT
+	// Other: RULE_NO_SYMBOL
 }
 
 // ExampleCheckWithConfig_hibp shows breach checking using the hibp package (mock for deterministic output).
