@@ -111,6 +111,34 @@ export class ConfigPanel {
         </div>
       </details>
 
+      <!-- Passphrase Mode -->
+      <details class="config-details">
+        <summary>
+            <span>Passphrase Mode</span>
+            <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+        </summary>
+        <div class="config-content">
+            <label class="toggle-switch-wrapper">
+                <input type="checkbox" id="cfg-passphrase-mode" ${this.config.passphraseMode ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+                <span class="toggle-label-text">Enable Passphrase-Friendly Scoring</span>
+            </label>
+            <p class="config-help-text" style="margin-top: 0.5rem; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+                When enabled, multi-word passphrases (detected via spaces, hyphens, camelCase, etc.) use word-based entropy and reduced dictionary penalties.
+            </p>
+            <div class="config-row">
+                <label for="cfg-min-words" class="row-label">Minimum Words</label>
+                <input type="number" id="cfg-min-words" class="input-number" value="${this.config.minWords || 4}" min="1" max="20" title="Minimum distinct words to consider a passphrase">
+            </div>
+            <div class="config-row">
+                <label for="cfg-word-dict-size" class="row-label">Word Dictionary Size</label>
+                <input type="number" id="cfg-word-dict-size" class="input-number" value="${this.config.wordDictSize || 7776}" min="2" title="Assumed dictionary size for entropy calculation (default: 7776 for diceware)">
+            </div>
+        </div>
+      </details>
+
       <!-- Dictionaries -->
       <details class="config-details">
         <summary>
@@ -146,10 +174,13 @@ export class ConfigPanel {
     this.bindCheckbox('cfg-symbol', 'requireSymbol');
     this.bindCheckbox('cfg-hibp', 'useHibp');
     this.bindCheckbox('cfg-disable-leet', 'disableLeet');
+    this.bindCheckbox('cfg-passphrase-mode', 'passphraseMode');
 
     this.bindNumber('cfg-min-len', 'minLength');
     this.bindNumber('cfg-max-repeats', 'maxRepeats');
     this.bindNumber('cfg-pat-len', 'patternMinLength');
+    this.bindNumber('cfg-min-words', 'minWords');
+    this.bindNumber('cfg-word-dict-size', 'wordDictSize');
 
     this.bindSelect('cfg-preset', 'preset');
 

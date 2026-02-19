@@ -15,6 +15,9 @@ export interface PassCheckConfig {
     disableLeet?: boolean;
     useHibp?: boolean;
     hibpResult?: { breached: boolean; count: number };
+    passphraseMode?: boolean;
+    minWords?: number;
+    wordDictSize?: number;
 }
 
 export interface Issue {
