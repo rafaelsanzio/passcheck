@@ -117,10 +117,12 @@ func CalculateWith(entropyBits float64, password string, issues IssueSet, minLen
 //
 // passphraseInfo can be nil if passphrase detection is disabled or the password
 // is not a passphrase. When non-nil and IsPassphrase is true, dictionary penalties
-// are reduced by 50% (from PenaltyPerDictMatch to PenaltyPerDictMatch/2).
-func CalculateWithPassphrase(entropyBits float64, password string, issues IssueSet, minLength int, passphraseInfo *passphrase.Info) int {
+// are eliminated (dictionary words are expected and desired in passphrases).
+//
+// weights can be nil to use default weights (all multipliers = 1.0).
+func CalculateWithPassphrase(entropyBits float64, password string, issues IssueSet, minLength int, passphraseInfo *passphrase.Info, weights *Weights) int {
 	// --- Base score from entropy ---
-	base := entropyBits * maxScoreBase / entropyFull
+	baseEntropy := entropyBits * maxScoreBase / entropyFull
 
 	// --- Bonuses ---
 	bonus := lengthBonusWith(password, minLength) + charsetBonus(password)
@@ -136,11 +138,19 @@ func CalculateWithPassphrase(entropyBits float64, password string, issues IssueS
 		dictPenalty = 0 // No dictionary penalties for passphrases
 	}
 
-	penalty := len(issues.Rules)*PenaltyPerRule +
-		len(issues.Patterns)*PenaltyPerPattern +
-		len(issues.Dictionary)*dictPenalty +
-		len(issues.Context)*PenaltyPerContext +
-		len(issues.HIBP)*PenaltyPerHIBP
+	// Apply weights if provided
+	var base float64
+	var penalty int
+	if weights != nil {
+		base, penalty = weights.applyWeights(baseEntropy, issues, dictPenalty)
+	} else {
+		base = baseEntropy
+		penalty = len(issues.Rules)*PenaltyPerRule +
+			len(issues.Patterns)*PenaltyPerPattern +
+			len(issues.Dictionary)*dictPenalty +
+			len(issues.Context)*PenaltyPerContext +
+			len(issues.HIBP)*PenaltyPerHIBP
+	}
 
 	score := int(base) + bonus - penalty
 

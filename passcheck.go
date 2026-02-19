@@ -244,9 +244,22 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	// otherwise use character-based entropy with the configured EntropyMode
 	e, passphraseInfo := calculateEntropy(password, pw, cfg, issueSet.Patterns)
 
+	// Convert config penalty weights to scoring weights
+	var scoringWeights *scoring.Weights
+	if cfg.PenaltyWeights != nil {
+		scoringWeights = &scoring.Weights{
+			RuleViolation:   cfg.PenaltyWeights.RuleViolation,
+			PatternMatch:    cfg.PenaltyWeights.PatternMatch,
+			DictionaryMatch: cfg.PenaltyWeights.DictionaryMatch,
+			ContextMatch:    cfg.PenaltyWeights.ContextMatch,
+			HIBPBreach:      cfg.PenaltyWeights.HIBPBreach,
+			EntropyWeight:   cfg.PenaltyWeights.EntropyWeight,
+		}
+	}
+
 	// Weighted scoring using the configured MinLength for bonus baseline.
 	// Reduce dictionary penalties if this is a detected passphrase.
-	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo)
+	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo, scoringWeights)
 
 	// Verdict
 	verdict := scoring.Verdict(score)
