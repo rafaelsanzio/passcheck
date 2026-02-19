@@ -84,25 +84,26 @@ const (
 // Issue codes — stable identifiers for programmatic handling.
 // Consumers can switch on Code to react differently (e.g. "RULE_TOO_SHORT" vs "DICT_COMMON_PASSWORD").
 const (
-	CodeRuleTooShort        = "RULE_TOO_SHORT"
-	CodeRuleNoUpper         = "RULE_NO_UPPER"
-	CodeRuleNoLower         = "RULE_NO_LOWER"
-	CodeRuleNoDigit         = "RULE_NO_DIGIT"
-	CodeRuleNoSymbol        = "RULE_NO_SYMBOL"
-	CodeRuleWhitespace      = "RULE_WHITESPACE"
-	CodeRuleControlChar     = "RULE_CONTROL_CHAR"
-	CodeRuleRepeatedChars   = "RULE_REPEATED_CHARS"
-	CodePatternKeyboard     = "PATTERN_KEYBOARD"
-	CodePatternSequence     = "PATTERN_SEQUENCE"
-	CodePatternBlock        = "PATTERN_BLOCK"
-	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
-	CodeDictCommonPassword  = "DICT_COMMON_PASSWORD"
-	CodeDictLeetVariant     = "DICT_LEET_VARIANT"
-	CodeDictCommonWord      = "DICT_COMMON_WORD"
-	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
-	CodeHIBPBreached        = "HIBP_BREACHED"
-	CodeContextWord         = "CONTEXT_WORD"
+	CodeRuleTooShort        = issue.CodeRuleTooShort
+	CodeRuleNoUpper         = issue.CodeRuleNoUpper
+	CodeRuleNoLower         = issue.CodeRuleNoLower
+	CodeRuleNoDigit         = issue.CodeRuleNoDigit
+	CodeRuleNoSymbol        = issue.CodeRuleNoSymbol
+	CodeRuleWhitespace      = issue.CodeRuleWhitespace
+	CodeRuleControlChar     = issue.CodeRuleControlChar
+	CodeRuleRepeatedChars   = issue.CodeRuleRepeatedChars
+	CodePatternKeyboard     = issue.CodePatternKeyboard
+	CodePatternSequence     = issue.CodePatternSequence
+	CodePatternBlock        = issue.CodePatternBlock
+	CodePatternSubstitution = issue.CodePatternSubstitution
+	CodeDictCommonPassword  = issue.CodeDictCommonPassword
+	CodeDictLeetVariant     = issue.CodeDictLeetVariant
+	CodeDictCommonWord      = issue.CodeDictCommonWord
+	CodeDictCommonWordSub   = issue.CodeDictCommonWordSub
+	CodeHIBPBreached        = issue.CodeHIBPBreached
+	CodeContextWord         = issue.CodeContextWord
 )
+
 
 // Issue represents a single finding from a password check.
 type Issue struct {
@@ -194,72 +195,42 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	// Enforce maximum length to bound algorithmic complexity.
 	pw := truncate(password)
 
-	// Map public config to internal options.
-	rulesOpts := rules.Options{
-		MinLength:     cfg.MinLength,
-		RequireUpper:  cfg.RequireUpper,
-		RequireLower:  cfg.RequireLower,
-		RequireDigit:  cfg.RequireDigit,
-		RequireSymbol: cfg.RequireSymbol,
-		MaxRepeats:    cfg.MaxRepeats,
-	}
-
-	patternsOpts := patterns.Options{
-		KeyboardMinLen: cfg.PatternMinLength,
-		SequenceMinLen: cfg.PatternMinLength,
-	}
-
-	dictOpts := dictionary.Options{
-		CustomPasswords: toLowerSlice(cfg.CustomPasswords),
-		CustomWords:     toLowerSlice(cfg.CustomWords),
-		DisableLeet:     cfg.DisableLeet,
-		ConstantTime:    cfg.ConstantTimeMode,
-	}
-
-	contextOpts := context.Options{
-		ContextWords: cfg.ContextWords,
-	}
-
-	hibpOpts := hibpcheck.Options{
-		Checker:        cfg.HIBPChecker,
-		MinOccurrences: cfg.HIBPMinOccurrences,
-	}
-	if cfg.HIBPResult != nil {
-		hibpOpts.Result = &hibpcheck.Result{
-			Breached: cfg.HIBPResult.Breached,
-			Count:    cfg.HIBPResult.Count,
-		}
-	}
-
 	// Collect issues by category for weighted scoring.
 	issueSet := scoring.IssueSet{
-		Rules:      rules.CheckWith(pw, rulesOpts),
-		Patterns:   patterns.CheckWith(pw, patternsOpts),
-		Dictionary: dictionary.CheckWith(pw, dictOpts),
-		Context:    context.CheckWith(pw, contextOpts),
-		HIBP:       hibpcheck.CheckWith(password, hibpOpts),
+		Rules: rules.CheckWith(pw, rules.Options{
+			MinLength:     cfg.MinLength,
+			RequireUpper:  cfg.RequireUpper,
+			RequireLower:  cfg.RequireLower,
+			RequireDigit:  cfg.RequireDigit,
+			RequireSymbol: cfg.RequireSymbol,
+			MaxRepeats:    cfg.MaxRepeats,
+		}),
+		Patterns: patterns.CheckWith(pw, patterns.Options{
+			KeyboardMinLen: cfg.PatternMinLength,
+			SequenceMinLen: cfg.PatternMinLength,
+		}),
+		Dictionary: dictionary.CheckWith(pw, dictionary.Options{
+			CustomPasswords: toLowerSlice(cfg.CustomPasswords),
+			CustomWords:     toLowerSlice(cfg.CustomWords),
+			DisableLeet:     cfg.DisableLeet,
+			ConstantTime:    cfg.ConstantTimeMode,
+		}),
+		Context: context.CheckWith(pw, context.Options{
+			ContextWords: cfg.ContextWords,
+		}),
+		HIBP: hibpcheck.CheckWith(password, hibpcheck.Options{
+			Checker:        cfg.HIBPChecker,
+			MinOccurrences: cfg.HIBPMinOccurrences,
+			Result:         mapHIBPResult(cfg.HIBPResult),
+		}),
 	}
 
-	// Entropy calculation: use word-based entropy for passphrases if enabled,
-	// otherwise use character-based entropy with the configured EntropyMode
+	// Calculate entropy and detect passphrase (word-based entropy if applicable)
 	e, passphraseInfo := calculateEntropy(password, pw, cfg, issueSet.Patterns)
 
-	// Convert config penalty weights to scoring weights
-	var scoringWeights *scoring.Weights
-	if cfg.PenaltyWeights != nil {
-		scoringWeights = &scoring.Weights{
-			RuleViolation:   cfg.PenaltyWeights.RuleViolation,
-			PatternMatch:    cfg.PenaltyWeights.PatternMatch,
-			DictionaryMatch: cfg.PenaltyWeights.DictionaryMatch,
-			ContextMatch:    cfg.PenaltyWeights.ContextMatch,
-			HIBPBreach:      cfg.PenaltyWeights.HIBPBreach,
-			EntropyWeight:   cfg.PenaltyWeights.EntropyWeight,
-		}
-	}
+	// Weighted scoring
+	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo, mapWeights(cfg.PenaltyWeights))
 
-	// Weighted scoring using the configured MinLength for bonus baseline.
-	// Reduce dictionary penalties if this is a detected passphrase.
-	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo, scoringWeights)
 
 	// Verdict
 	verdict := scoring.Verdict(score)
@@ -438,3 +409,28 @@ func toLowerSlice(ss []string) []string {
 	}
 	return out
 }
+
+func mapHIBPResult(res *HIBPCheckResult) *hibpcheck.Result {
+	if res == nil {
+		return nil
+	}
+	return &hibpcheck.Result{
+		Breached: res.Breached,
+		Count:    res.Count,
+	}
+}
+
+func mapWeights(w *PenaltyWeights) *scoring.Weights {
+	if w == nil {
+		return nil
+	}
+	return &scoring.Weights{
+		RuleViolation:   w.RuleViolation,
+		PatternMatch:    w.PatternMatch,
+		DictionaryMatch: w.DictionaryMatch,
+		ContextMatch:    w.ContextMatch,
+		HIBPBreach:      w.HIBPBreach,
+		EntropyWeight:   w.EntropyWeight,
+	}
+}
+

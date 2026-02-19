@@ -97,8 +97,9 @@ func TestAnalyzeCharsets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := AnalyzeCharsets(tt.password)
+			info, _ := AnalyzeCharsets(tt.password)
 			if got := info.PoolSize(); got != tt.expected {
+
 				t.Errorf("PoolSize = %d, want %d", got, tt.expected)
 			}
 		})

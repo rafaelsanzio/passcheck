@@ -202,7 +202,8 @@ func findCommonWordsIn(password string, words []string) []string {
 			continue
 		}
 
-		idx := indexOfSubstring(password, word)
+		idx := strings.Index(password, word)
+
 		if idx < 0 {
 			continue
 		}
@@ -295,18 +296,8 @@ func filterToMaximalMatches(matches []string) []string {
 	return kept
 }
 
-// indexOfSubstring returns the index of the first occurrence of substr
-// in s, or -1 if not found.
-func indexOfSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
 // isRegionCovered reports whether all bytes in s[start:start+length]
+
 // have already been covered by a previous match.
 func isRegionCovered(covered []bool, start, length int) bool {
 	for i := start; i < start+length; i++ {

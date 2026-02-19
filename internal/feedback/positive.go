@@ -22,20 +22,20 @@ const (
 func GeneratePositive(password string, issues scoring.IssueSet, entropyBits float64) []string {
 	var msgs []string
 
-	runeLen := len([]rune(password))
+	// Character-set diversity praise.
+	info, runeLen := entropy.AnalyzeCharsets(password)
 
 	// Length praise.
 	if runeLen >= goodLengthThreshold {
 		msgs = append(msgs, fmt.Sprintf("Good length (%d characters)", runeLen))
 	}
 
-	// Character-set diversity praise.
-	info := entropy.AnalyzeCharsets(password)
 	if count := info.SetCount(); count >= 3 {
 		msgs = append(msgs, fmt.Sprintf(
 			"Good character diversity (%d of 4 character types)", count,
 		))
 	}
+
 
 	// No pattern issues → praise.
 	if len(issues.Patterns) == 0 && runeLen > 0 {

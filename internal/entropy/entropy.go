@@ -75,26 +75,27 @@ func (c CharsetInfo) PoolSize() int {
 // Length is measured in Unicode code points (runes), not bytes, so
 // multi-byte characters are counted correctly.
 func Calculate(password string) float64 {
-	runes := []rune(password)
-	if len(runes) == 0 {
+	info, count := AnalyzeCharsets(password)
+	if count == 0 {
 		return 0
 	}
 
-	info := AnalyzeCharsets(password)
 	poolSize := info.PoolSize()
 	if poolSize == 0 {
 		return 0
 	}
 
-	return float64(len(runes)) * math.Log2(float64(poolSize))
+	return float64(count) * math.Log2(float64(poolSize))
 }
 
 // AnalyzeCharsets performs a single pass over the password to determine
-// which character set types are present. Uses the unicode package for
-// correct handling of non-ASCII letters and digits.
-func AnalyzeCharsets(password string) CharsetInfo {
+// which character set types are present and counts the number of runes.
+// Uses the unicode package for correct handling of non-ASCII letters and digits.
+func AnalyzeCharsets(password string) (CharsetInfo, int) {
 	var info CharsetInfo
+	count := 0
 	for _, r := range password {
+		count++
 		switch {
 		case unicode.IsLower(r):
 			info.HasLower = true
@@ -106,5 +107,6 @@ func AnalyzeCharsets(password string) CharsetInfo {
 			info.HasSymbol = true
 		}
 	}
-	return info
+	return info, count
 }
+

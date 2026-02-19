@@ -193,8 +193,9 @@ func lengthBonusWith(password string, minLength int) int {
 
 // charsetBonus awards extra points for using multiple character set types.
 func charsetBonus(password string) int {
-	info := entropy.AnalyzeCharsets(password)
+	info, _ := entropy.AnalyzeCharsets(password)
 	count := info.SetCount()
+
 	if count <= 1 {
 		return 0
 	}

@@ -349,27 +349,6 @@ func TestContainsLeet(t *testing.T) {
 // Word Helpers
 // ---------------------------------------------------------------------------
 
-func TestIndexOfSubstring(t *testing.T) {
-	tests := []struct {
-		s      string
-		substr string
-		want   int
-	}{
-		{"hello world", "world", 6},
-		{"hello", "hello", 0},
-		{"hello", "xyz", -1},
-		{"", "a", -1},
-		{"abc", "", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.s+"_"+tt.substr, func(t *testing.T) {
-			if got := indexOfSubstring(tt.s, tt.substr); got != tt.want {
-				t.Errorf("indexOfSubstring(%q, %q) = %d, want %d", tt.s, tt.substr, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestIsRegionCovered(t *testing.T) {
 	covered := []bool{true, true, true, false, false}
