@@ -122,7 +122,33 @@ type Config struct {
 	// leak information. Ignored when zero or negative or when ConstantTimeMode
 	// is false. Default: 0 (no padding).
 	MinExecutionTimeMs int
+
+	// EntropyMode controls how entropy is calculated. Simple mode uses the
+	// basic character-pool × length formula. Advanced mode reduces entropy
+	// for detected patterns (keyboard walks, sequences). PatternAware mode
+	// includes Markov-chain analysis for character transition probabilities.
+	// Default: EntropyModeSimple (backward-compatible).
+	EntropyMode EntropyMode
 }
+
+// EntropyMode specifies the entropy calculation method.
+type EntropyMode string
+
+const (
+	// EntropyModeSimple uses the basic character-pool × length formula.
+	// This is the default and backward-compatible mode.
+	EntropyModeSimple EntropyMode = "simple"
+
+	// EntropyModeAdvanced reduces entropy for detected patterns (keyboard
+	// walks, sequences, repeated blocks) to provide more accurate strength
+	// estimates for patterned passwords.
+	EntropyModeAdvanced EntropyMode = "advanced"
+
+	// EntropyModePatternAware includes full pattern analysis plus Markov-chain
+	// analysis for character transition probabilities, providing the most
+	// accurate entropy estimates.
+	EntropyModePatternAware EntropyMode = "pattern-aware"
+)
 
 // DefaultConfig returns the recommended configuration with sensible
 // defaults for general-purpose password validation.
@@ -139,6 +165,7 @@ func DefaultConfig() Config {
 		PassphraseMode:   false,
 		MinWords:         4,
 		WordDictSize:     7776,
+		EntropyMode:      EntropyModeSimple,
 	}
 }
 

@@ -59,6 +59,7 @@ import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
 	"github.com/rafaelsanzio/passcheck/internal/hibpcheck"
+	"github.com/rafaelsanzio/passcheck/internal/issue"
 	"github.com/rafaelsanzio/passcheck/internal/passphrase"
 	"github.com/rafaelsanzio/passcheck/internal/patterns"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
@@ -239,8 +240,9 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		HIBP:       hibpcheck.CheckWith(password, hibpOpts),
 	}
 
-	// Entropy calculation: use word-based entropy for passphrases if enabled
-	e, passphraseInfo := calculateEntropy(password, pw, cfg)
+	// Entropy calculation: use word-based entropy for passphrases if enabled,
+	// otherwise use character-based entropy with the configured EntropyMode
+	e, passphraseInfo := calculateEntropy(password, pw, cfg, issueSet.Patterns)
 
 	// Weighted scoring using the configured MinLength for bonus baseline.
 	// Reduce dictionary penalties if this is a detected passphrase.
@@ -303,23 +305,29 @@ func CheckBytesWithConfig(password []byte, cfg Config) (Result, error) {
 }
 
 // calculateEntropy computes entropy for a password, using word-based entropy
-// for passphrases when PassphraseMode is enabled, otherwise character-based entropy.
+// for passphrases when PassphraseMode is enabled, otherwise character-based entropy
+// with the configured EntropyMode (simple, advanced, or pattern-aware).
 // Returns the entropy value and passphrase info (nil if not a passphrase).
-func calculateEntropy(password, pw string, cfg Config) (float64, *passphrase.Info) {
-	if !cfg.PassphraseMode {
-		return entropy.Calculate(pw), nil
+func calculateEntropy(password, pw string, cfg Config, patternIssues []issue.Issue) (float64, *passphrase.Info) {
+	// Handle passphrase mode first (word-based entropy)
+	if cfg.PassphraseMode {
+		info := passphrase.Detect(password, cfg.MinWords)
+		if info.IsPassphrase {
+			dictSize := cfg.WordDictSize
+			if dictSize < 2 {
+				dictSize = passphrase.DefaultWordDictSize
+			}
+			return passphrase.CalculateWordEntropy(info.WordCount, dictSize), &info
+		}
+		// Not a passphrase, fall through to character-based entropy
 	}
 
-	info := passphrase.Detect(password, cfg.MinWords)
-	if !info.IsPassphrase {
-		return entropy.Calculate(pw), nil
+	// Character-based entropy with mode selection
+	entropyMode := string(cfg.EntropyMode)
+	if entropyMode == "" {
+		entropyMode = string(EntropyModeSimple) // Default to simple for backward compatibility
 	}
-
-	dictSize := cfg.WordDictSize
-	if dictSize < 2 {
-		dictSize = passphrase.DefaultWordDictSize
-	}
-	return passphrase.CalculateWordEntropy(info.WordCount, dictSize), &info
+	return entropy.CalculateWithMode(pw, entropyMode, patternIssues), nil
 }
 
 // CheckIncremental evaluates the strength of a password using the default
