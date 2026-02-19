@@ -70,9 +70,43 @@ h1 {
 .config-header h3 {
   font-size: 1.125rem;
   font-weight: 600;
-  margin: 0 0 1.25rem 0;
+  margin: 0 0 1rem 0;
   color: var(--text-primary);
   letter-spacing: -0.025em;
+}
+
+.active-policy-badge {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.policy-name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--primary-color);
+  margin-bottom: 0.25rem;
+}
+
+.policy-description {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.policy-locked-notice {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--warning-color);
+  line-height: 1.5;
 }
 
 .config-section {
@@ -250,6 +284,42 @@ input:checked~.toggle-label-text {
   transition: all 0.2s;
 }
 
+.input-number.locked,
+.input-number:disabled {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+.input-number:disabled:hover {
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+.toggle-switch-wrapper.locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.toggle-switch-wrapper.locked input[type="checkbox"]:disabled {
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+.toggle-switch-wrapper.locked .toggle-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-switch-wrapper input[type="checkbox"]:disabled {
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 .config-row-select {
   display: flex;
   flex-direction: column;
@@ -338,13 +408,101 @@ textarea:focus {
 }
 
 /* --- Password Input --- */
+.password-input-group {
+  position: relative;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.password-input {
+  width: 100%;
+  padding: 1rem 3.5rem 1rem 1.25rem; /* Extra right padding for toggle button */
+  font-size: 1.125rem;
+  font-family: var(--font-family);
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: var(--transition);
+  box-sizing: border-box;
+  letter-spacing: 0.05em; /* Better readability for password dots */
+}
+
+.password-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  letter-spacing: normal;
+}
+
+.password-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.password-input:hover:not(:focus) {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Password toggle button */
+.password-toggle-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.password-toggle-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.password-toggle-btn:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.password-toggle-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke-width: 2;
+}
+
+.password-toggle-btn[aria-pressed="true"] {
+  color: var(--primary-color);
+}
+
+.password-toggle-btn[aria-pressed="true"]:hover {
+  color: var(--primary-hover);
+}
+
+/* Legacy support for old class names */
 .input-group {
   position: relative;
   margin-bottom: 1.5rem;
 }
 
-input[type="password"],
-input[type="text"] {
+input[type="password"]:not(.password-input),
+input[type="text"]:not(.password-input) {
   width: 100%;
   padding: 1rem 1.25rem;
   font-size: 1.125rem;
@@ -357,7 +515,7 @@ input[type="text"] {
   box-sizing: border-box;
 }
 
-input:focus {
+input:focus:not(.password-input) {
   border-color: var(--primary-color);
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
   background: rgba(0, 0, 0, 0.4);
@@ -439,7 +597,11 @@ input:focus {
 .suggestions-container,
 .issues-container {
   margin-top: 1.5rem;
-  padding: 0;
+  padding: 0 !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
   display: none;
   animation: fadeIn 0.3s ease-out;
 }
@@ -456,6 +618,10 @@ input:focus {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-bottom: 0.75rem;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
   display: flex;
   align-items: center;
 }
@@ -470,12 +636,22 @@ input:focus {
 
 .suggestions-list,
 .issues-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  /* Force alignment - override any browser defaults */
+  text-indent: 0 !important;
+  -webkit-padding-start: 0 !important;
+  -moz-padding-start: 0 !important;
 }
 
 .suggestion-item,
@@ -485,13 +661,32 @@ input:focus {
   align-items: center;
   line-height: 1.4;
   padding: 0.5rem 0.75rem;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
+  /* Ensure no indentation */
+  text-indent: 0 !important;
+  -webkit-margin-start: 0 !important;
+  -moz-margin-start: 0 !important;
 }
 
 .suggestion-item {
   color: #bbf7d0;
+  text-decoration: none;
+}
+
+.suggestion-item span {
+  text-decoration: none;
+}
+
+.suggestion-text {
+  text-decoration: none;
 }
 
 .issue-item {

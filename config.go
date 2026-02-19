@@ -129,6 +129,51 @@ type Config struct {
 	// includes Markov-chain analysis for character transition probabilities.
 	// Default: EntropyModeSimple (backward-compatible).
 	EntropyMode EntropyMode
+
+	// PenaltyWeights allows customization of penalty multipliers and entropy
+	// weight for scoring. When nil, default weights are used (all multipliers = 1.0).
+	// Organizations can adjust these to prioritize different security concerns.
+	// For example, setting DictionaryMatch to 2.0 doubles dictionary penalties,
+	// while setting EntropyWeight to 0.5 reduces the influence of entropy on the score.
+	PenaltyWeights *PenaltyWeights
+}
+
+// PenaltyWeights allows customization of penalty multipliers and entropy weight
+// for password strength scoring. All weights default to 1.0 when nil or when
+// individual fields are zero.
+//
+// Example: To double dictionary penalties and reduce entropy influence:
+//
+//	weights := &passcheck.PenaltyWeights{
+//		DictionaryMatch: 2.0,
+//		EntropyWeight:   0.5,
+//	}
+//	cfg.PenaltyWeights = weights
+type PenaltyWeights struct {
+	// RuleViolation multiplies penalties for rule violations (length, charset, etc.).
+	// Default: 1.0 (PenaltyPerRule = 5 per violation).
+	RuleViolation float64
+
+	// PatternMatch multiplies penalties for pattern detections (keyboard walks, sequences).
+	// Default: 1.0 (PenaltyPerPattern = 10 per pattern).
+	PatternMatch float64
+
+	// DictionaryMatch multiplies penalties for dictionary matches (common passwords, words).
+	// Default: 1.0 (PenaltyPerDictMatch = 15 per match).
+	DictionaryMatch float64
+
+	// ContextMatch multiplies penalties for context-aware detections (username, email).
+	// Default: 1.0 (PenaltyPerContext = 20 per match).
+	ContextMatch float64
+
+	// HIBPBreach multiplies penalties for HIBP breach database matches.
+	// Default: 1.0 (PenaltyPerHIBP = 25 per breach).
+	HIBPBreach float64
+
+	// EntropyWeight multiplies the base score derived from entropy.
+	// Default: 1.0 (entropy contributes fully to base score).
+	// Values < 1.0 reduce entropy influence; values > 1.0 increase it.
+	EntropyWeight float64
 }
 
 // EntropyMode specifies the entropy calculation method.
@@ -203,6 +248,35 @@ func (c Config) Validate() error {
 	}
 	if c.MinExecutionTimeMs < 0 {
 		return fmt.Errorf("passcheck: MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)
+	}
+	if c.PenaltyWeights != nil {
+		if err := c.PenaltyWeights.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Validate checks that all penalty weights are non-negative.
+// Zero values are treated as defaults (1.0) during scoring.
+func (w *PenaltyWeights) Validate() error {
+	if w.RuleViolation < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.RuleViolation must be >= 0, got %f", w.RuleViolation)
+	}
+	if w.PatternMatch < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.PatternMatch must be >= 0, got %f", w.PatternMatch)
+	}
+	if w.DictionaryMatch < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.DictionaryMatch must be >= 0, got %f", w.DictionaryMatch)
+	}
+	if w.ContextMatch < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.ContextMatch must be >= 0, got %f", w.ContextMatch)
+	}
+	if w.HIBPBreach < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.HIBPBreach must be >= 0, got %f", w.HIBPBreach)
+	}
+	if w.EntropyWeight < 0 {
+		return fmt.Errorf("passcheck: PenaltyWeights.EntropyWeight must be >= 0, got %f", w.EntropyWeight)
 	}
 	return nil
 }
