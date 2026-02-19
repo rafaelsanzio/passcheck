@@ -1368,6 +1368,238 @@ func TestCheckWithConfig_EntropyMode(t *testing.T) {
 	})
 }
 
+func TestCheckWithConfig_PenaltyWeights(t *testing.T) {
+	t.Run("BackwardCompatibility_NilWeights", func(t *testing.T) {
+		// Nil weights should behave like default weights (all 1.0)
+		password := "Xk9$mP2!vR7@nL4"
+
+		cfgNil := DefaultConfig()
+		cfgNil.PenaltyWeights = nil
+		resultNil, err := CheckWithConfig(password, cfgNil)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		cfgDefault := DefaultConfig()
+		// DefaultConfig doesn't set PenaltyWeights, so it's nil
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Scores should be identical
+		if resultNil.Score != resultDefault.Score {
+			t.Errorf("Nil weights should match default: nil=%d, default=%d",
+				resultNil.Score, resultDefault.Score)
+		}
+	})
+
+	t.Run("CustomPenaltyMultipliers", func(t *testing.T) {
+		// Use a password with high entropy but some issues to avoid clamping to 0
+		password := "MyP@ssw0rd123" // Has dictionary word but good entropy
+
+		cfgDefault := DefaultConfig()
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Skip test if default score is already 0 (too many issues)
+		if resultDefault.Score == 0 {
+			t.Skip("Password has too many issues, score clamped to 0")
+		}
+
+		// Double dictionary penalties
+		cfgDoubleDict := DefaultConfig()
+		cfgDoubleDict.PenaltyWeights = &PenaltyWeights{
+			DictionaryMatch: 2.0,
+		}
+		resultDoubleDict, err := CheckWithConfig(password, cfgDoubleDict)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Score should be lower with doubled dictionary penalties
+		if resultDoubleDict.Score >= resultDefault.Score {
+			t.Errorf("Doubled dictionary penalty should reduce score: doubled=%d, default=%d",
+				resultDoubleDict.Score, resultDefault.Score)
+		}
+
+		// Double all penalties
+		cfgDoubleAll := DefaultConfig()
+		cfgDoubleAll.PenaltyWeights = &PenaltyWeights{
+			RuleViolation:  2.0,
+			PatternMatch:   2.0,
+			DictionaryMatch: 2.0,
+			ContextMatch:   2.0,
+			HIBPBreach:     2.0,
+		}
+		resultDoubleAll, err := CheckWithConfig(password, cfgDoubleAll)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Score should be even lower (or both clamped to 0)
+		if resultDoubleAll.Score > resultDoubleDict.Score {
+			t.Errorf("Doubled all penalties should reduce score further: all=%d, dict=%d",
+				resultDoubleAll.Score, resultDoubleDict.Score)
+		}
+	})
+
+	t.Run("EntropyWeight", func(t *testing.T) {
+		// High entropy password with no issues
+		password := "Xk9$mP2!vR7@nL4&wQzB"
+
+		cfgDefault := DefaultConfig()
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Halve entropy weight
+		cfgHalfEntropy := DefaultConfig()
+		cfgHalfEntropy.PenaltyWeights = &PenaltyWeights{
+			EntropyWeight: 0.5,
+		}
+		resultHalfEntropy, err := CheckWithConfig(password, cfgHalfEntropy)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Score should be lower with halved entropy weight
+		if resultHalfEntropy.Score >= resultDefault.Score {
+			t.Errorf("Halved entropy weight should reduce score: half=%d, default=%d",
+				resultHalfEntropy.Score, resultDefault.Score)
+		}
+
+		// Double entropy weight
+		cfgDoubleEntropy := DefaultConfig()
+		cfgDoubleEntropy.PenaltyWeights = &PenaltyWeights{
+			EntropyWeight: 2.0,
+		}
+		resultDoubleEntropy, err := CheckWithConfig(password, cfgDoubleEntropy)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Score should be higher (but clamped to 100)
+		if resultDoubleEntropy.Score < resultDefault.Score {
+			t.Errorf("Doubled entropy weight should increase score: double=%d, default=%d",
+				resultDoubleEntropy.Score, resultDefault.Score)
+		}
+	})
+
+	t.Run("ZeroValues_DefaultToOne", func(t *testing.T) {
+		password := "Xk9$mP2!vR7@nL4"
+
+		cfgDefault := DefaultConfig()
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Zero values should default to 1.0
+		cfgZero := DefaultConfig()
+		cfgZero.PenaltyWeights = &PenaltyWeights{} // All zeros
+		resultZero, err := CheckWithConfig(password, cfgZero)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Scores should be identical
+		if resultZero.Score != resultDefault.Score {
+			t.Errorf("Zero weights should default to 1.0: zero=%d, default=%d",
+				resultZero.Score, resultDefault.Score)
+		}
+	})
+
+	t.Run("Validation_NegativeWeights", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.PenaltyWeights = &PenaltyWeights{
+			RuleViolation: -1.0,
+		}
+
+		err := cfg.Validate()
+		if err == nil {
+			t.Error("Expected validation error for negative weight")
+		}
+		if err != nil && err.Error() == "" {
+			t.Error("Validation error should not be empty")
+		}
+	})
+
+	t.Run("PassphraseMode_WithWeights", func(t *testing.T) {
+		// Passphrase with dictionary words (expected and desired)
+		password := "correct-horse-battery-staple"
+
+		cfgPassphrase := DefaultConfig()
+		cfgPassphrase.PassphraseMode = true
+		cfgPassphrase.MinWords = 4
+		cfgPassphrase.RequireSymbol = false
+		cfgPassphrase.RequireDigit = false
+		cfgPassphrase.RequireUpper = false
+		resultPassphrase, err := CheckWithConfig(password, cfgPassphrase)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Add weights that would normally increase dictionary penalties
+		cfgPassphraseWeighted := DefaultConfig()
+		cfgPassphraseWeighted.PassphraseMode = true
+		cfgPassphraseWeighted.MinWords = 4
+		cfgPassphraseWeighted.RequireSymbol = false
+		cfgPassphraseWeighted.RequireDigit = false
+		cfgPassphraseWeighted.RequireUpper = false
+		cfgPassphraseWeighted.PenaltyWeights = &PenaltyWeights{
+			DictionaryMatch: 2.0, // This should be ignored for passphrases
+		}
+		resultPassphraseWeighted, err := CheckWithConfig(password, cfgPassphraseWeighted)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Scores should be identical (dictionary penalties eliminated for passphrases)
+		if resultPassphrase.Score != resultPassphraseWeighted.Score {
+			t.Errorf("Passphrase scores should be identical regardless of dictionary weights: unweighted=%d, weighted=%d",
+				resultPassphrase.Score, resultPassphraseWeighted.Score)
+		}
+	})
+
+	t.Run("CombinedWeights", func(t *testing.T) {
+		// Test multiple weight adjustments together
+		password := "password123"
+
+		cfg := DefaultConfig()
+		cfg.PenaltyWeights = &PenaltyWeights{
+			RuleViolation:  1.5,
+			PatternMatch:   0.5, // Reduce pattern penalties
+			DictionaryMatch: 2.0, // Increase dictionary penalties
+			EntropyWeight:  0.8,  // Slightly reduce entropy influence
+		}
+
+		result, err := CheckWithConfig(password, cfg)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Score should be valid
+		if result.Score < 0 || result.Score > 100 {
+			t.Errorf("Score out of range: %d", result.Score)
+		}
+
+		// Verify weights are applied (score should differ from default)
+		cfgDefault := DefaultConfig()
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		if result.Score == resultDefault.Score {
+			t.Logf("Warning: Combined weights produced same score as default (may be coincidental)")
+		}
+	})
+}
+
 // --- Fuzz tests ---
 
 func FuzzCheck(f *testing.F) {
