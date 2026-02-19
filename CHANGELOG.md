@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - TBD
+## [1.2.0] - 2026-02-25
+
+### Added
+
+- **Pre-computed HIBP result**: `Config.HIBPResult` and `HIBPCheckResult` (Breached, Count) let callers pass in a breach lookup result instead of using `HIBPChecker`. Intended for WASM/browser builds where the HIBP check runs in JavaScript (e.g. SHA-1 + fetch) and the result is passed into the Go check. When set, `HIBPChecker` is ignored for that run. See [config.go](config.go) and [MIGRATION.md](MIGRATION.md#v110--v120).
+- **WASM HIBP from JS**: The WebAssembly build accepts an optional HIBP result in the config object (e.g. from a JS-side k-anonymity lookup), so breach checking can run in the browser without a Go HTTP client. The example app demonstrates a same-origin proxy for the HIBP API.
+
+### Changed
+
+- **Constant-time mode**: When `Config.ConstantTimeMode` is true, dictionary common-word reporting now matches the non-constant-time path: only maximal matches are reported (no overlapping substrings). This keeps issue count and feedback consistent between the two modes.
+
+### Fixed
+
+- **CI / timing tests**: Statistical timing tests in `internal/safemem` are more robust on CI (Windows, varied load). Interleaved measurements and ratio-based fallbacks reduce false failures while still detecting real timing leaks.
+- **Lint**: Resolved staticcheck SA4008 in constant-time integer comparison loop (use of `for range [8]int{}`).
+
+[1.2.0]: https://github.com/rafaelsanzio/passcheck/compare/v1.1.0...v1.2.0
+
+## [1.1.0] - 2026-02-18
 
 ### Added
 
@@ -79,5 +97,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input length capped at 1024 runes to prevent algorithmic DoS.
 - Pattern detection loops are bounded to prevent quadratic complexity.
 
-[Unreleased]: https://github.com/rafaelsanzio/passcheck/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rafaelsanzio/passcheck/compare/v1.2.0...HEAD
 [1.0.0]: https://github.com/rafaelsanzio/passcheck/releases/tag/v1.0.0

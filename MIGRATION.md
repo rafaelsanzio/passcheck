@@ -2,6 +2,31 @@
 
 This document describes how to upgrade between versions of passcheck.
 
+## v1.1.0 → v1.2.0
+
+v1.2.0 is **backward-compatible** with v1.1.0. No code changes are required.
+
+### Optional: Pre-computed HIBP result (WASM / browser)
+
+If you build for WebAssembly and want to run the HIBP breach check in JavaScript (e.g. to avoid CORS or to keep the API key in JS), you can pass the result into the Go check via `Config.HIBPResult`:
+
+```go
+// In Go (WASM entry or wrapper), after JS has done the HIBP lookup:
+cfg := passcheck.DefaultConfig()
+cfg.HIBPResult = &passcheck.HIBPCheckResult{Breached: true, Count: 42}
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+When `HIBPResult` is non-nil, `HIBPChecker` is ignored for that check. This allows the browser to perform the k-anonymity request and pass `Breached` and `Count` into the config before calling the Go checker.
+
+No change is required if you use `HIBPChecker` only or do not use HIBP.
+
+### Constant-time mode
+
+If you use `Config.ConstantTimeMode`, the set of reported issues (and their count) now matches the non-constant-time path. Previously, constant-time mode could report more dictionary issues (overlapping substrings); it now reports only maximal matches, consistent with the default mode.
+
+---
+
 ## v1.0.0 → v1.1.0
 
 v1.1.0 adds structured issues, policy presets, context-aware detection, and HTTP middleware. The library remains backward-compatible for most use cases.
@@ -134,3 +159,5 @@ result, _ := passcheck.CheckWithConfig(password, cfg)
 ```
 
 Breach findings appear as issues with `Code == passcheck.CodeHIBPBreached`. On network or API errors, the breach check is skipped. See [hibp](hibp/) and [examples/hibp](examples/hibp/).
+
+Alternatively, you can set `Config.HIBPResult` with a pre-computed result (e.g. from a WASM/JS HIBP check) so the library does not call `HIBPChecker`; see the v1.1.0 → v1.2.0 section above.

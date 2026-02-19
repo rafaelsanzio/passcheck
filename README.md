@@ -32,7 +32,7 @@ result with a score, verdict, and specific feedback.
 - **WebAssembly (browser)** — [WASM build](wasm/README.md) for client-side validation with no server round-trip. Includes both a simple HTML example and a [modern TypeScript/Vite web app](wasm/web/README.md)
 - **Zero Dependencies** — Root library: stdlib only; optional [hibp](hibp/) package for breach checks
 
-For upgrade instructions from v1.0.0 (e.g. `Result.Issues` type change, new presets and middleware), see [MIGRATION.md](MIGRATION.md).
+For upgrade instructions (e.g. v1.0.0 → v1.1.0 `Result.Issues` change, v1.2.0 `HIBPResult` for WASM), see [MIGRATION.md](MIGRATION.md).
 
 ## Installation
 
@@ -55,6 +55,7 @@ git clone https://github.com/rafaelsanzio/passcheck.git
 cd passcheck
 make build       # builds to bin/passcheck
 make install     # installs to $GOPATH/bin
+make test        # run tests (on macOS with Go < 1.24, use make test-macos or see [TROUBLESHOOTING.md](TROUBLESHOOTING.md))
 make wasm    # builds WASM and copies to wasm/web/public/ for the modern web app
 make serve-wasm # starts the modern TypeScript/Vite web app (requires Node.js)
 ```
@@ -258,7 +259,8 @@ if err != nil {
 | `ContextWords`       | `[]string`    | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
 | `DisableLeet`        | `bool`        | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
 | `HIBPChecker`        | `HIBPChecker` | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
-| `HIBPMinOccurrences` | `int`         | 1       | Min breach count to report (only when `HIBPChecker` is set)                                                                           |
+| `HIBPMinOccurrences` | `int`         | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
+| `HIBPResult`         | `*HIBPCheckResult` | nil | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                      |
 | `ConstantTimeMode`   | `bool`        | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
 | `MinExecutionTimeMs` | `int`         | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
 
@@ -315,7 +317,7 @@ for _, iss := range result.Issues {
 }
 ```
 
-On network or API errors, the breach check is skipped and the rest of the result is still returned (graceful degradation). See [examples/hibp](examples/hibp/) and the [hibp package](hibp/) for details.
+On network or API errors, the breach check is skipped and the rest of the result is still returned (graceful degradation). For WASM or browser builds, you can run the HIBP lookup in JavaScript and pass the result in via `Config.HIBPResult` (see [MIGRATION.md](MIGRATION.md#v110--v120)). See [examples/hibp](examples/hibp/) and the [hibp package](hibp/) for details.
 
 ### Disabling Leet Normalization
 
