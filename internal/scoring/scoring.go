@@ -15,6 +15,7 @@ package scoring
 import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/issue"
+	"github.com/rafaelsanzio/passcheck/internal/passphrase"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 )
 
@@ -37,6 +38,7 @@ const (
 	MaxLengthBonus    = 20 // cap on length bonus
 	BonusPerCharset   = 3  // per charset type beyond the first
 	MaxCharsetBonus   = 9  // cap (4 types → 3 × 3 = 9)
+	BonusPassphrase   = 25 // bonus for detected passphrases (4+ words)
 )
 
 // Entropy-to-score mapping constants.
@@ -100,6 +102,43 @@ func CalculateWith(entropyBits float64, password string, issues IssueSet, minLen
 	penalty := len(issues.Rules)*PenaltyPerRule +
 		len(issues.Patterns)*PenaltyPerPattern +
 		len(issues.Dictionary)*PenaltyPerDictMatch +
+		len(issues.Context)*PenaltyPerContext +
+		len(issues.HIBP)*PenaltyPerHIBP
+
+	score := int(base) + bonus - penalty
+
+	return clamp(score, 0, 100)
+}
+
+// CalculateWithPassphrase computes a password strength score from 0 to 100,
+// similar to [CalculateWith], but reduces dictionary penalties when the password
+// is detected as a passphrase (has multiple words). This enables passphrase-friendly
+// scoring that rewards multi-word combinations.
+//
+// passphraseInfo can be nil if passphrase detection is disabled or the password
+// is not a passphrase. When non-nil and IsPassphrase is true, dictionary penalties
+// are reduced by 50% (from PenaltyPerDictMatch to PenaltyPerDictMatch/2).
+func CalculateWithPassphrase(entropyBits float64, password string, issues IssueSet, minLength int, passphraseInfo *passphrase.Info) int {
+	// --- Base score from entropy ---
+	base := entropyBits * maxScoreBase / entropyFull
+
+	// --- Bonuses ---
+	bonus := lengthBonusWith(password, minLength) + charsetBonus(password)
+	// Add passphrase bonus for multi-word passphrases
+	if passphraseInfo != nil && passphraseInfo.IsPassphrase {
+		bonus += BonusPassphrase
+	}
+
+	// --- Penalties ---
+	// Eliminate dictionary penalties for passphrases (dictionary words are expected and desired)
+	dictPenalty := PenaltyPerDictMatch
+	if passphraseInfo != nil && passphraseInfo.IsPassphrase {
+		dictPenalty = 0 // No dictionary penalties for passphrases
+	}
+
+	penalty := len(issues.Rules)*PenaltyPerRule +
+		len(issues.Patterns)*PenaltyPerPattern +
+		len(issues.Dictionary)*dictPenalty +
 		len(issues.Context)*PenaltyPerContext +
 		len(issues.HIBP)*PenaltyPerHIBP
 

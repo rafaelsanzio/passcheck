@@ -59,6 +59,7 @@ import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
 	"github.com/rafaelsanzio/passcheck/internal/hibpcheck"
+	"github.com/rafaelsanzio/passcheck/internal/passphrase"
 	"github.com/rafaelsanzio/passcheck/internal/patterns"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 	"github.com/rafaelsanzio/passcheck/internal/safemem"
@@ -238,11 +239,12 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 		HIBP:       hibpcheck.CheckWith(password, hibpOpts),
 	}
 
-	// Entropy calculation
-	e := entropy.Calculate(pw)
+	// Entropy calculation: use word-based entropy for passphrases if enabled
+	e, passphraseInfo := calculateEntropy(password, pw, cfg)
 
 	// Weighted scoring using the configured MinLength for bonus baseline.
-	score := scoring.CalculateWith(e, pw, issueSet, cfg.MinLength)
+	// Reduce dictionary penalties if this is a detected passphrase.
+	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo)
 
 	// Verdict
 	verdict := scoring.Verdict(score)
@@ -298,6 +300,26 @@ func CheckBytesWithConfig(password []byte, cfg Config) (Result, error) {
 	s := string(password)
 	safemem.Zero(password)
 	return CheckWithConfig(s, cfg)
+}
+
+// calculateEntropy computes entropy for a password, using word-based entropy
+// for passphrases when PassphraseMode is enabled, otherwise character-based entropy.
+// Returns the entropy value and passphrase info (nil if not a passphrase).
+func calculateEntropy(password, pw string, cfg Config) (float64, *passphrase.Info) {
+	if !cfg.PassphraseMode {
+		return entropy.Calculate(pw), nil
+	}
+
+	info := passphrase.Detect(password, cfg.MinWords)
+	if !info.IsPassphrase {
+		return entropy.Calculate(pw), nil
+	}
+
+	dictSize := cfg.WordDictSize
+	if dictSize < 2 {
+		dictSize = passphrase.DefaultWordDictSize
+	}
+	return passphrase.CalculateWordEntropy(info.WordCount, dictSize), &info
 }
 
 // CheckIncremental evaluates the strength of a password using the default

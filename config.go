@@ -99,6 +99,23 @@ type Config struct {
 	// Default: false (faster, non-constant-time lookups).
 	ConstantTimeMode bool
 
+	// PassphraseMode, when true, enables passphrase-friendly scoring. When a
+	// password is detected as a passphrase (has at least MinWords distinct words),
+	// word-based entropy is used instead of character-based entropy, and dictionary
+	// penalties are reduced. Word boundaries are detected using spaces, hyphens,
+	// camelCase, and snake_case. Default: false (standard password scoring).
+	PassphraseMode bool
+
+	// MinWords is the minimum number of distinct words required to consider a
+	// password a passphrase. Only used when PassphraseMode is true.
+	// Default: 4 (NIST SP 800-63B recommends 4+ words for passphrases).
+	MinWords int
+
+	// WordDictSize is the assumed dictionary size for word-based entropy calculation
+	// when PassphraseMode is true and a passphrase is detected. Used in the diceware
+	// model: entropy = wordCount × log2(WordDictSize). Default: 7776 (diceware standard).
+	WordDictSize int
+
 	// MinExecutionTimeMs is the minimum total execution time in milliseconds
 	// for CheckWithConfig (and related) when ConstantTimeMode is true. The
 	// function sleeps for the remaining time so that response duration does not
@@ -119,6 +136,9 @@ func DefaultConfig() Config {
 		MaxRepeats:       3,
 		PatternMinLength: 4,
 		MaxIssues:        5,
+		PassphraseMode:   false,
+		MinWords:         4,
+		WordDictSize:     7776,
 	}
 }
 
@@ -130,6 +150,8 @@ func DefaultConfig() Config {
 //   - MaxRepeats must be >= 2
 //   - PatternMinLength must be >= 3
 //   - MaxIssues must be >= 0
+//   - MinWords must be >= 1 when PassphraseMode is true
+//   - WordDictSize must be >= 2 when PassphraseMode is true
 //   - MinExecutionTimeMs must be >= 0 when set
 func (c Config) Validate() error {
 	if c.MinLength < 1 {
@@ -143,6 +165,14 @@ func (c Config) Validate() error {
 	}
 	if c.MaxIssues < 0 {
 		return fmt.Errorf("passcheck: MaxIssues must be >= 0, got %d", c.MaxIssues)
+	}
+	if c.PassphraseMode {
+		if c.MinWords < 1 {
+			return fmt.Errorf("passcheck: MinWords must be >= 1 when PassphraseMode is true, got %d", c.MinWords)
+		}
+		if c.WordDictSize < 2 {
+			return fmt.Errorf("passcheck: WordDictSize must be >= 2 when PassphraseMode is true, got %d", c.WordDictSize)
+		}
 	}
 	if c.MinExecutionTimeMs < 0 {
 		return fmt.Errorf("passcheck: MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)
