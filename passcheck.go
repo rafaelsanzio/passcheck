@@ -104,8 +104,18 @@ const (
 	CodeContextWord         = issue.CodeContextWord
 )
 
+// Checker performs password strength checks.
+type Checker interface {
+	Check(password string) (Result, error)
+}
+
+// Check implements the Checker interface for a given configuration.
+func (c Config) Check(password string) (Result, error) {
+	return CheckWithConfig(password, c)
+}
 
 // Issue represents a single finding from a password check.
+
 type Issue struct {
 	Code     string `json:"code"`     // Stable identifier (e.g. "RULE_TOO_SHORT", "DICT_COMMON_PASSWORD")
 	Message  string `json:"message"`  // Human-readable description
@@ -168,9 +178,10 @@ type IncrementalDelta struct {
 // configuration is always valid.
 func Check(password string) Result {
 	// DefaultConfig is guaranteed valid — error is always nil.
-	result, _ := CheckWithConfig(password, DefaultConfig())
+	result, _ := DefaultConfig().Check(password)
 	return result
 }
+
 
 // CheckWithConfig evaluates the strength of a password using a custom
 // configuration. It returns an error if the configuration is invalid.
@@ -196,33 +207,13 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	pw := truncate(password)
 
 	// Collect issues by category for weighted scoring.
+	opts := configToInternal(password, cfg)
 	issueSet := scoring.IssueSet{
-		Rules: rules.CheckWith(pw, rules.Options{
-			MinLength:     cfg.MinLength,
-			RequireUpper:  cfg.RequireUpper,
-			RequireLower:  cfg.RequireLower,
-			RequireDigit:  cfg.RequireDigit,
-			RequireSymbol: cfg.RequireSymbol,
-			MaxRepeats:    cfg.MaxRepeats,
-		}),
-		Patterns: patterns.CheckWith(pw, patterns.Options{
-			KeyboardMinLen: cfg.PatternMinLength,
-			SequenceMinLen: cfg.PatternMinLength,
-		}),
-		Dictionary: dictionary.CheckWith(pw, dictionary.Options{
-			CustomPasswords: toLowerSlice(cfg.CustomPasswords),
-			CustomWords:     toLowerSlice(cfg.CustomWords),
-			DisableLeet:     cfg.DisableLeet,
-			ConstantTime:    cfg.ConstantTimeMode,
-		}),
-		Context: context.CheckWith(pw, context.Options{
-			ContextWords: cfg.ContextWords,
-		}),
-		HIBP: hibpcheck.CheckWith(password, hibpcheck.Options{
-			Checker:        cfg.HIBPChecker,
-			MinOccurrences: cfg.HIBPMinOccurrences,
-			Result:         mapHIBPResult(cfg.HIBPResult),
-		}),
+		Rules:      rules.CheckWith(pw, opts.rules),
+		Patterns:   patterns.CheckWith(pw, opts.patterns),
+		Dictionary: dictionary.CheckWith(pw, opts.dictionary),
+		Context:    context.CheckWith(pw, opts.context),
+		HIBP:       hibpcheck.CheckWith(password, opts.hibp),
 	}
 
 	// Calculate entropy and detect passphrase (word-based entropy if applicable)
@@ -230,7 +221,6 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 
 	// Weighted scoring
 	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo, mapWeights(cfg.PenaltyWeights))
-
 
 	// Verdict
 	verdict := scoring.Verdict(score)
@@ -242,13 +232,11 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	suggestions := feedback.GeneratePositive(pw, issueSet, e)
 
 	// Convert internal issues to public Issue type.
-	issues := make([]Issue, len(refined))
-	for i, iss := range refined {
-		issues[i] = Issue{Code: iss.Code, Message: iss.Message, Category: iss.Category, Severity: iss.Severity}
-	}
+	issues := toPublicIssues(refined)
 	if suggestions == nil {
 		suggestions = []string{}
 	}
+
 
 	if cfg.ConstantTimeMode && cfg.MinExecutionTimeMs > 0 {
 		safemem.SleepRemaining(start, cfg.MinExecutionTimeMs)
@@ -433,4 +421,63 @@ func mapWeights(w *PenaltyWeights) *scoring.Weights {
 		EntropyWeight:   w.EntropyWeight,
 	}
 }
+
+// internalOptions bundles options for internal package checks.
+type internalOptions struct {
+	rules      rules.Options
+	patterns   patterns.Options
+	dictionary dictionary.Options
+	context    context.Options
+	hibp       hibpcheck.Options
+}
+
+// configToInternal maps the public Config to internal package option structs.
+func configToInternal(password string, cfg Config) internalOptions {
+	return internalOptions{
+		rules: rules.Options{
+			MinLength:     cfg.MinLength,
+			RequireUpper:  cfg.RequireUpper,
+			RequireLower:  cfg.RequireLower,
+			RequireDigit:  cfg.RequireDigit,
+			RequireSymbol: cfg.RequireSymbol,
+			MaxRepeats:    cfg.MaxRepeats,
+		},
+		patterns: patterns.Options{
+			KeyboardMinLen: cfg.PatternMinLength,
+			SequenceMinLen: cfg.PatternMinLength,
+		},
+		dictionary: dictionary.Options{
+			CustomPasswords: toLowerSlice(cfg.CustomPasswords),
+			CustomWords:     toLowerSlice(cfg.CustomWords),
+			DisableLeet:     cfg.DisableLeet,
+			ConstantTime:    cfg.ConstantTimeMode,
+		},
+		context: context.Options{
+			ContextWords: cfg.ContextWords,
+		},
+		hibp: hibpcheck.Options{
+			Checker:        cfg.HIBPChecker,
+			MinOccurrences: cfg.HIBPMinOccurrences,
+			Result:         mapHIBPResult(cfg.HIBPResult),
+		},
+	}
+}
+
+// toPublicIssues converts internal issues to the public Issue type.
+func toPublicIssues(refined []issue.Issue) []Issue {
+	if len(refined) == 0 {
+		return nil
+	}
+	out := make([]Issue, len(refined))
+	for i, iss := range refined {
+		out[i] = Issue{
+			Code:     iss.Code,
+			Message:  iss.Message,
+			Category: iss.Category,
+			Severity: iss.Severity,
+		}
+	}
+	return out
+}
+
 

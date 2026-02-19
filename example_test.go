@@ -76,8 +76,9 @@ func ExampleConfig_Validate() {
 	err := cfg.Validate()
 	fmt.Println(err)
 	// Output:
-	// passcheck: MinLength must be >= 1, got 0
+	// passcheck: invalid configuration: MinLength must be >= 1, got 0
 }
+
 
 // ExampleResult_IssueMessages shows backward-compatible message slice from Result.Issues.
 func ExampleResult_IssueMessages() {
@@ -103,8 +104,9 @@ func ExampleCheckWithConfig_invalidConfig() {
 	}
 	fmt.Printf("Score: %d\n", result.Score)
 	// Output:
-	// Error: passcheck: MinLength must be >= 1, got -1
+	// Error: passcheck: invalid configuration: MinLength must be >= 1, got -1
 }
+
 
 // ExampleCheckBytesWithConfig runs CheckBytes with custom config and zeroes the buffer.
 func ExampleCheckBytesWithConfig() {

@@ -34,10 +34,13 @@ func CheckWith(password string, opts Options) []issue.Issue {
 		var err error
 		breached, count, err = opts.Checker.Check(password)
 		if err != nil {
-			// Graceful degradation on error: skip the check.
+			// Graceful degradation: errors from the HIBP checker are intentionally
+			// ignored so that the core analysis can continue even if the network
+			// or the API is down.
 			breached, count = false, 0
 		}
 	}
+
 
 	minOcc := opts.MinOccurrences
 	if minOcc < 1 {

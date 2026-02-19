@@ -1,6 +1,13 @@
 package passcheck
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrInvalidConfig is returned when the configuration fails validation.
+var ErrInvalidConfig = errors.New("passcheck: invalid configuration")
+
 
 // HIBPCheckResult is a pre-computed result from an HIBP (Have I Been Pwned) lookup.
 // When Config.HIBPResult is set, the library uses it instead of calling HIBPChecker.
@@ -197,7 +204,11 @@ const (
 
 // DefaultConfig returns the recommended configuration with sensible
 // defaults for general-purpose password validation.
+//
+// Note: Presets set only a subset of fields; other fields retain zero
+// values and are interpreted as defaults (see Validate).
 func DefaultConfig() Config {
+
 	return Config{
 		MinLength:        12,
 		RequireUpper:     true,
@@ -217,38 +228,34 @@ func DefaultConfig() Config {
 // Validate checks the configuration for invalid values and returns
 // an error describing the first problem found.
 //
-// Rules:
-//   - MinLength must be >= 1
-//   - MaxRepeats must be >= 2
-//   - PatternMinLength must be >= 3
-//   - MaxIssues must be >= 0
-//   - MinWords must be >= 1 when PassphraseMode is true
-//   - WordDictSize must be >= 2 when PassphraseMode is true
-//   - MinExecutionTimeMs must be >= 0 when set
+// Callers can use errors.Is(err, passcheck.ErrInvalidConfig) to identify
+// validation failures.
 func (c Config) Validate() error {
-	if c.MinLength < 1 {
-		return fmt.Errorf("passcheck: MinLength must be >= 1, got %d", c.MinLength)
+	type check struct {
+		ok  bool
+		msg string
 	}
-	if c.MaxRepeats < 2 {
-		return fmt.Errorf("passcheck: MaxRepeats must be >= 2, got %d", c.MaxRepeats)
+	checks := []check{
+		{c.MinLength >= 1, fmt.Sprintf("MinLength must be >= 1, got %d", c.MinLength)},
+		{c.MaxRepeats >= 2, fmt.Sprintf("MaxRepeats must be >= 2, got %d", c.MaxRepeats)},
+		{c.PatternMinLength >= 3, fmt.Sprintf("PatternMinLength must be >= 3, got %d", c.PatternMinLength)},
+		{c.MaxIssues >= 0, fmt.Sprintf("MaxIssues must be >= 0, got %d", c.MaxIssues)},
+		{c.MinExecutionTimeMs >= 0, fmt.Sprintf("MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)},
 	}
-	if c.PatternMinLength < 3 {
-		return fmt.Errorf("passcheck: PatternMinLength must be >= 3, got %d", c.PatternMinLength)
-	}
-	if c.MaxIssues < 0 {
-		return fmt.Errorf("passcheck: MaxIssues must be >= 0, got %d", c.MaxIssues)
-	}
+
 	if c.PassphraseMode {
-		if c.MinWords < 1 {
-			return fmt.Errorf("passcheck: MinWords must be >= 1 when PassphraseMode is true, got %d", c.MinWords)
-		}
-		if c.WordDictSize < 2 {
-			return fmt.Errorf("passcheck: WordDictSize must be >= 2 when PassphraseMode is true, got %d", c.WordDictSize)
+		checks = append(checks,
+			check{c.MinWords >= 1, fmt.Sprintf("MinWords must be >= 1 when PassphraseMode is true, got %d", c.MinWords)},
+			check{c.WordDictSize >= 2, fmt.Sprintf("WordDictSize must be >= 2 when PassphraseMode is true, got %d", c.WordDictSize)},
+		)
+	}
+
+	for _, k := range checks {
+		if !k.ok {
+			return fmt.Errorf("%w: %s", ErrInvalidConfig, k.msg)
 		}
 	}
-	if c.MinExecutionTimeMs < 0 {
-		return fmt.Errorf("passcheck: MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)
-	}
+
 	if c.PenaltyWeights != nil {
 		if err := c.PenaltyWeights.Validate(); err != nil {
 			return err
@@ -257,26 +264,28 @@ func (c Config) Validate() error {
 	return nil
 }
 
+
 // Validate checks that all penalty weights are non-negative.
 // Zero values are treated as defaults (1.0) during scoring.
 func (w *PenaltyWeights) Validate() error {
-	if w.RuleViolation < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.RuleViolation must be >= 0, got %f", w.RuleViolation)
+	type check struct {
+		ok  bool
+		msg string
 	}
-	if w.PatternMatch < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.PatternMatch must be >= 0, got %f", w.PatternMatch)
+	checks := []check{
+		{w.RuleViolation >= 0, fmt.Sprintf("PenaltyWeights.RuleViolation must be >= 0, got %f", w.RuleViolation)},
+		{w.PatternMatch >= 0, fmt.Sprintf("PenaltyWeights.PatternMatch must be >= 0, got %f", w.PatternMatch)},
+		{w.DictionaryMatch >= 0, fmt.Sprintf("PenaltyWeights.DictionaryMatch must be >= 0, got %f", w.DictionaryMatch)},
+		{w.ContextMatch >= 0, fmt.Sprintf("PenaltyWeights.ContextMatch must be >= 0, got %f", w.ContextMatch)},
+		{w.HIBPBreach >= 0, fmt.Sprintf("PenaltyWeights.HIBPBreach must be >= 0, got %f", w.HIBPBreach)},
+		{w.EntropyWeight >= 0, fmt.Sprintf("PenaltyWeights.EntropyWeight must be >= 0, got %f", w.EntropyWeight)},
 	}
-	if w.DictionaryMatch < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.DictionaryMatch must be >= 0, got %f", w.DictionaryMatch)
-	}
-	if w.ContextMatch < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.ContextMatch must be >= 0, got %f", w.ContextMatch)
-	}
-	if w.HIBPBreach < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.HIBPBreach must be >= 0, got %f", w.HIBPBreach)
-	}
-	if w.EntropyWeight < 0 {
-		return fmt.Errorf("passcheck: PenaltyWeights.EntropyWeight must be >= 0, got %f", w.EntropyWeight)
+
+	for _, k := range checks {
+		if !k.ok {
+			return fmt.Errorf("%w: %s", ErrInvalidConfig, k.msg)
+		}
 	}
 	return nil
 }
+

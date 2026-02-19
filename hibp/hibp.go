@@ -53,8 +53,12 @@ func NewClient() *Client {
 
 // Check returns whether the password appears in the breach database and how many times.
 // Only the first 5 characters of the SHA-1 hash are sent to the API (k-anonymity).
-// On network or API errors, returns (false, 0, error) for graceful degradation.
+//
+// Graceful degradation: The library level (passcheck) intentionally ignores errors
+// returned by the HIBP checker. If an API or network error occurs, the check is
+// skipped as if the password was not found in any breach.
 func (c *Client) Check(password string) (breached bool, count int, err error) {
+
 	if password == "" {
 		return false, 0, nil
 	}
