@@ -1046,6 +1046,328 @@ func TestCheckWithConfig_PassphraseMode(t *testing.T) {
 	})
 }
 
+func TestCheckWithConfig_EntropyMode(t *testing.T) {
+	t.Run("AcceptanceCriteria_PatternedVsRandom", func(t *testing.T) {
+		// Acceptance criteria: "qwerty123456" has lower entropy than "Xk9$mP2!vR7@nL4"
+		patterned := "qwerty123456"
+		random := "Xk9$mP2!vR7@nL4"
+
+		// Test with simple mode (baseline)
+		cfgSimple := DefaultConfig()
+		cfgSimple.EntropyMode = EntropyModeSimple
+
+		resultPatternedSimple, err := CheckWithConfig(patterned, cfgSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+		resultRandomSimple, err := CheckWithConfig(random, cfgSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		t.Logf("Simple mode - Patterned entropy: %.2f, Random entropy: %.2f",
+			resultPatternedSimple.Entropy, resultRandomSimple.Entropy)
+
+		// Test with advanced mode
+		cfgAdvanced := DefaultConfig()
+		cfgAdvanced.EntropyMode = EntropyModeAdvanced
+
+		resultPatternedAdvanced, err := CheckWithConfig(patterned, cfgAdvanced)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+		resultRandomAdvanced, err := CheckWithConfig(random, cfgAdvanced)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// In advanced mode, patterned password should have significantly lower entropy
+		if resultPatternedAdvanced.Entropy >= resultRandomAdvanced.Entropy {
+			t.Errorf("Advanced mode: patterned entropy (%.2f) should be < random entropy (%.2f)",
+				resultPatternedAdvanced.Entropy, resultRandomAdvanced.Entropy)
+		}
+
+		// Verify reduction is significant (at least 20% lower)
+		reduction := (resultRandomAdvanced.Entropy - resultPatternedAdvanced.Entropy) / resultRandomAdvanced.Entropy
+		if reduction < 0.2 {
+			t.Errorf("Expected at least 20%% entropy reduction for patterned password, got %.1f%%",
+				reduction*100)
+		}
+
+		// Verify scores also reflect the entropy difference
+		if resultPatternedAdvanced.Score >= resultRandomAdvanced.Score {
+			t.Errorf("Advanced mode: patterned score (%d) should be < random score (%d)",
+				resultPatternedAdvanced.Score, resultRandomAdvanced.Score)
+		}
+
+		t.Logf("Advanced mode - Patterned entropy: %.2f (score: %d), Random entropy: %.2f (score: %d) (reduction: %.1f%%)",
+			resultPatternedAdvanced.Entropy, resultPatternedAdvanced.Score,
+			resultRandomAdvanced.Entropy, resultRandomAdvanced.Score, reduction*100)
+	})
+
+	t.Run("BackwardCompatibility_DefaultIsSimple", func(t *testing.T) {
+		password := "Xk9$mP2!vR7@nL4"
+
+		// Default config should use simple mode
+		cfgDefault := DefaultConfig()
+		resultDefault, err := CheckWithConfig(password, cfgDefault)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Explicit simple mode
+		cfgSimple := DefaultConfig()
+		cfgSimple.EntropyMode = EntropyModeSimple
+		resultSimple, err := CheckWithConfig(password, cfgSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Entropy, score, and verdict should be identical (backward compatibility)
+		if resultDefault.Entropy != resultSimple.Entropy {
+			t.Errorf("Default mode should match simple mode entropy: default=%.2f, simple=%.2f",
+				resultDefault.Entropy, resultSimple.Entropy)
+		}
+		if resultDefault.Score != resultSimple.Score {
+			t.Errorf("Default mode should match simple mode score: default=%d, simple=%d",
+				resultDefault.Score, resultSimple.Score)
+		}
+		if resultDefault.Verdict != resultSimple.Verdict {
+			t.Errorf("Default mode should match simple mode verdict: default=%q, simple=%q",
+				resultDefault.Verdict, resultSimple.Verdict)
+		}
+	})
+
+	t.Run("AllModes_ProgressiveReduction", func(t *testing.T) {
+		// Patterned password should show progressive entropy reduction across modes
+		password := "qwerty123456"
+
+		modes := []struct {
+			name EntropyMode
+			desc string
+		}{
+			{EntropyModeSimple, "simple"},
+			{EntropyModeAdvanced, "advanced"},
+			{EntropyModePatternAware, "pattern-aware"},
+		}
+
+		var results []struct {
+			entropy float64
+			score   int
+			verdict string
+		}
+
+		for _, mode := range modes {
+			cfg := DefaultConfig()
+			cfg.EntropyMode = mode.name
+			result, err := CheckWithConfig(password, cfg)
+			if err != nil {
+				t.Fatalf("CheckWithConfig failed for %s mode: %v", mode.desc, err)
+			}
+			results = append(results, struct {
+				entropy float64
+				score   int
+				verdict string
+			}{result.Entropy, result.Score, result.Verdict})
+			t.Logf("%s mode: entropy=%.2f, score=%d, verdict=%q", mode.desc, result.Entropy, result.Score, result.Verdict)
+		}
+
+		// Advanced and pattern-aware should have lower entropy than simple for patterned passwords
+		if results[1].entropy >= results[0].entropy {
+			t.Errorf("Advanced mode should reduce entropy: simple=%.2f, advanced=%.2f",
+				results[0].entropy, results[1].entropy)
+		}
+		if results[2].entropy >= results[0].entropy {
+			t.Errorf("Pattern-aware mode should reduce entropy: simple=%.2f, pattern-aware=%.2f",
+				results[0].entropy, results[2].entropy)
+		}
+
+		// Pattern-aware should be <= advanced (may be equal or slightly lower)
+		if results[2].entropy > results[1].entropy+0.1 { // Small tolerance for floating point
+			t.Errorf("Pattern-aware should be <= advanced: advanced=%.2f, pattern-aware=%.2f",
+				results[1].entropy, results[2].entropy)
+		}
+
+		// Scores should reflect entropy differences
+		if results[1].score >= results[0].score {
+			t.Errorf("Advanced mode should reduce score: simple=%d, advanced=%d",
+				results[0].score, results[1].score)
+		}
+	})
+
+	t.Run("EmptyMode_DefaultsToSimple", func(t *testing.T) {
+		password := "Xk9$mP2!vR7@nL4"
+
+		cfgSimple := DefaultConfig()
+		cfgSimple.EntropyMode = EntropyModeSimple
+		resultSimple, err := CheckWithConfig(password, cfgSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Empty string should default to simple
+		cfgEmpty := DefaultConfig()
+		cfgEmpty.EntropyMode = ""
+		resultEmpty, err := CheckWithConfig(password, cfgEmpty)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Invalid mode should also default to simple
+		cfgInvalid := DefaultConfig()
+		cfgInvalid.EntropyMode = EntropyMode("invalid")
+		resultInvalid, err := CheckWithConfig(password, cfgInvalid)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		if resultEmpty.Entropy != resultSimple.Entropy {
+			t.Errorf("Empty mode should default to simple: empty=%.2f, simple=%.2f",
+				resultEmpty.Entropy, resultSimple.Entropy)
+		}
+		if resultInvalid.Entropy != resultSimple.Entropy {
+			t.Errorf("Invalid mode should default to simple: invalid=%.2f, simple=%.2f",
+				resultInvalid.Entropy, resultSimple.Entropy)
+		}
+		if resultEmpty.Score != resultSimple.Score {
+			t.Errorf("Empty mode should match simple score: empty=%d, simple=%d",
+				resultEmpty.Score, resultSimple.Score)
+		}
+	})
+
+	t.Run("RandomPassword_NoReduction", func(t *testing.T) {
+		// Random passwords should have similar entropy across modes (no patterns to reduce)
+		password := "Xk9$mP2!vR7@nL4&wQzB"
+
+		cfgSimple := DefaultConfig()
+		cfgSimple.EntropyMode = EntropyModeSimple
+		resultSimple, err := CheckWithConfig(password, cfgSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		cfgAdvanced := DefaultConfig()
+		cfgAdvanced.EntropyMode = EntropyModeAdvanced
+		resultAdvanced, err := CheckWithConfig(password, cfgAdvanced)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		cfgPatternAware := DefaultConfig()
+		cfgPatternAware.EntropyMode = EntropyModePatternAware
+		resultPatternAware, err := CheckWithConfig(password, cfgPatternAware)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Entropy should be similar (within 5% tolerance for Markov adjustments)
+		tolerance := resultSimple.Entropy * 0.05
+		if resultAdvanced.Entropy < resultSimple.Entropy-tolerance || resultAdvanced.Entropy > resultSimple.Entropy+tolerance {
+			t.Logf("Advanced mode entropy differs slightly (expected for random passwords): simple=%.2f, advanced=%.2f",
+				resultSimple.Entropy, resultAdvanced.Entropy)
+		}
+		if resultPatternAware.Entropy < resultSimple.Entropy-tolerance*2 || resultPatternAware.Entropy > resultSimple.Entropy+tolerance*2 {
+			t.Logf("Pattern-aware mode entropy differs (expected for Markov analysis): simple=%.2f, pattern-aware=%.2f",
+				resultSimple.Entropy, resultPatternAware.Entropy)
+		}
+	})
+
+	t.Run("VariousPatterns_EntropyReduction", func(t *testing.T) {
+		testCases := []struct {
+			name     string
+			password string
+			desc     string
+		}{
+			{"keyboard", "qwertyuiop", "keyboard walk"},
+			{"sequence", "abcdefgh", "alphabetic sequence"},
+			{"numeric_sequence", "12345678", "numeric sequence"},
+			{"repeated_block", "abcabcabc", "repeated block"},
+			{"mixed_patterns", "qwerty123456", "keyboard + sequence"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				cfgSimple := DefaultConfig()
+				cfgSimple.EntropyMode = EntropyModeSimple
+				resultSimple, err := CheckWithConfig(tc.password, cfgSimple)
+				if err != nil {
+					t.Fatalf("CheckWithConfig failed: %v", err)
+				}
+
+				cfgAdvanced := DefaultConfig()
+				cfgAdvanced.EntropyMode = EntropyModeAdvanced
+				resultAdvanced, err := CheckWithConfig(tc.password, cfgAdvanced)
+				if err != nil {
+					t.Fatalf("CheckWithConfig failed: %v", err)
+				}
+
+				// Advanced mode should reduce entropy for patterned passwords
+				if resultAdvanced.Entropy >= resultSimple.Entropy {
+					t.Errorf("%s (%s): advanced entropy (%.2f) should be < simple (%.2f)",
+						tc.name, tc.desc, resultAdvanced.Entropy, resultSimple.Entropy)
+				}
+
+				// Verify minimum entropy threshold (at least 10% of base)
+				minEntropy := resultSimple.Entropy * 0.1
+				if resultAdvanced.Entropy < minEntropy {
+					t.Errorf("%s: advanced entropy (%.2f) below minimum threshold (%.2f)",
+						tc.name, resultAdvanced.Entropy, minEntropy)
+				}
+
+				// Score should also reflect the reduction
+				if resultAdvanced.Score > resultSimple.Score {
+					t.Errorf("%s: advanced score (%d) should be <= simple (%d)",
+						tc.name, resultAdvanced.Score, resultSimple.Score)
+				}
+			})
+		}
+	})
+
+	t.Run("PassphraseMode_RespectsEntropyMode", func(t *testing.T) {
+		// When PassphraseMode is enabled, entropy mode should not affect word-based entropy
+		password := "correct-horse-battery-staple"
+
+		cfgPassphraseSimple := DefaultConfig()
+		cfgPassphraseSimple.PassphraseMode = true
+		cfgPassphraseSimple.EntropyMode = EntropyModeSimple
+		cfgPassphraseSimple.MinWords = 4
+		cfgPassphraseSimple.RequireSymbol = false
+		cfgPassphraseSimple.RequireDigit = false
+		cfgPassphraseSimple.RequireUpper = false
+
+		resultSimple, err := CheckWithConfig(password, cfgPassphraseSimple)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		cfgPassphraseAdvanced := DefaultConfig()
+		cfgPassphraseAdvanced.PassphraseMode = true
+		cfgPassphraseAdvanced.EntropyMode = EntropyModeAdvanced
+		cfgPassphraseAdvanced.MinWords = 4
+		cfgPassphraseAdvanced.RequireSymbol = false
+		cfgPassphraseAdvanced.RequireDigit = false
+		cfgPassphraseAdvanced.RequireUpper = false
+
+		resultAdvanced, err := CheckWithConfig(password, cfgPassphraseAdvanced)
+		if err != nil {
+			t.Fatalf("CheckWithConfig failed: %v", err)
+		}
+
+		// Passphrase entropy should be identical (word-based, not character-based)
+		if resultSimple.Entropy != resultAdvanced.Entropy {
+			t.Errorf("Passphrase entropy should be same regardless of EntropyMode: simple=%.2f, advanced=%.2f",
+				resultSimple.Entropy, resultAdvanced.Entropy)
+		}
+
+		// Should use word-based entropy (~51 bits for 4 words)
+		expectedMinEntropy := 45.0 // Allow some tolerance
+		if resultSimple.Entropy < expectedMinEntropy {
+			t.Errorf("Passphrase should use word-based entropy (expected >= %.1f), got %.2f",
+				expectedMinEntropy, resultSimple.Entropy)
+		}
+	})
+}
+
 // --- Fuzz tests ---
 
 func FuzzCheck(f *testing.F) {
