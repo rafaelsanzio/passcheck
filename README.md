@@ -23,7 +23,9 @@ result with a score, verdict, and specific feedback.
 - **Custom Blocklists** — Add organization-specific passwords and words via config
 - **Breach Database (HIBP)** — Optional [Have I Been Pwned](https://haveibeenpwned.com/) integration via k-anonymity (only 5-char hash prefix sent)
 - **HTTP Middleware** — Drop-in middleware for net/http (Chi, Echo, Gin, Fiber with optional build tags)
-- **Entropy Calculation** — Shannon entropy based on character-set diversity
+- **Entropy Calculation** — Multiple modes: Simple (character-set diversity), Advanced (pattern-aware reduction), Pattern-Aware (includes Markov-chain analysis)
+- **Passphrase Support** — Detects multi-word passphrases and uses word-based entropy (diceware model)
+- **Configurable Scoring Weights** — Customize penalty multipliers and entropy weight to match organizational security priorities
 - **Configurable Rules** — Adjust minimum length, character requirements, thresholds
 - **Actionable Feedback** — Prioritized issues and positive suggestions
 - **Real-Time Feedback** — `CheckIncremental` / `CheckIncrementalWithConfig` with delta for live strength meters
@@ -55,9 +57,9 @@ git clone https://github.com/rafaelsanzio/passcheck.git
 cd passcheck
 make build       # builds to bin/passcheck
 make install     # installs to $GOPATH/bin
-make test        # run tests (on macOS with Go < 1.24, use make test-macos or see [TROUBLESHOOTING.md](TROUBLESHOOTING.md))
-make wasm    # builds WASM and copies to wasm/web/public/ for the modern web app
-make serve-wasm # starts the modern TypeScript/Vite web app (requires Node.js)
+make test        # run tests
+make wasm        # builds WASM and copies to wasm/web/public/ for the modern web app
+make serve-wasm  # starts the modern TypeScript/Vite web app (requires Node.js)
 ```
 
 ## Quick Start
@@ -244,25 +246,30 @@ if err != nil {
 
 ### Config Fields
 
-| Field                | Type          | Default | Description                                                                                                                           |
-| -------------------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `MinLength`          | `int`         | 12      | Minimum runes required                                                                                                                |
-| `RequireUpper`       | `bool`        | true    | Require uppercase letter                                                                                                              |
-| `RequireLower`       | `bool`        | true    | Require lowercase letter                                                                                                              |
-| `RequireDigit`       | `bool`        | true    | Require numeric digit                                                                                                                 |
-| `RequireSymbol`      | `bool`        | true    | Require symbol character                                                                                                              |
-| `MaxRepeats`         | `int`         | 3       | Max consecutive identical characters                                                                                                  |
-| `PatternMinLength`   | `int`         | 4       | Min length for keyboard/sequence detection                                                                                            |
-| `MaxIssues`          | `int`         | 5       | Max issues returned (0 = no limit)                                                                                                    |
-| `CustomPasswords`    | `[]string`    | nil     | Additional passwords to block (case-insensitive)                                                                                      |
-| `CustomWords`        | `[]string`    | nil     | Additional words to detect as substrings                                                                                              |
-| `ContextWords`       | `[]string`    | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
-| `DisableLeet`        | `bool`        | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
-| `HIBPChecker`        | `HIBPChecker` | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
-| `HIBPMinOccurrences` | `int`         | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
-| `HIBPResult`         | `*HIBPCheckResult` | nil | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                      |
-| `ConstantTimeMode`   | `bool`        | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
-| `MinExecutionTimeMs` | `int`         | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
+| Field                | Type               | Default | Description                                                                                                                           |
+| -------------------- | ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinLength`          | `int`              | 12      | Minimum runes required                                                                                                                |
+| `RequireUpper`       | `bool`             | true    | Require uppercase letter                                                                                                              |
+| `RequireLower`       | `bool`             | true    | Require lowercase letter                                                                                                              |
+| `RequireDigit`       | `bool`             | true    | Require numeric digit                                                                                                                 |
+| `RequireSymbol`      | `bool`             | true    | Require symbol character                                                                                                              |
+| `MaxRepeats`         | `int`              | 3       | Max consecutive identical characters                                                                                                  |
+| `PatternMinLength`   | `int`              | 4       | Min length for keyboard/sequence detection                                                                                            |
+| `MaxIssues`          | `int`              | 5       | Max issues returned (0 = no limit)                                                                                                    |
+| `CustomPasswords`    | `[]string`         | nil     | Additional passwords to block (case-insensitive)                                                                                      |
+| `CustomWords`        | `[]string`         | nil     | Additional words to detect as substrings                                                                                              |
+| `ContextWords`       | `[]string`         | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
+| `DisableLeet`        | `bool`             | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
+| `HIBPChecker`        | `HIBPChecker`      | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
+| `HIBPMinOccurrences` | `int`              | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
+| `HIBPResult`         | `*HIBPCheckResult` | nil     | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                     |
+| `PassphraseMode`     | `bool`             | false   | Enable passphrase-friendly scoring; detects multi-word passphrases and uses word-based entropy                                        |
+| `MinWords`           | `int`              | 4       | Minimum distinct words to consider a passphrase (only used when `PassphraseMode` is true)                                              |
+| `WordDictSize`       | `int`              | 7776    | Assumed dictionary size for word-based entropy (diceware standard; only used when `PassphraseMode` is true)                            |
+| `EntropyMode`        | `EntropyMode`      | "simple" | Entropy calculation mode: "simple" (default), "advanced" (pattern-aware), "pattern-aware" (includes Markov-chain analysis)          |
+| `PenaltyWeights`     | `*PenaltyWeights`  | nil     | Custom penalty multipliers and entropy weight; when nil, defaults to 1.0 for all weights                                                |
+| `ConstantTimeMode`   | `bool`             | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
+| `MinExecutionTimeMs` | `int`              | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
 
 ### Custom Blocklists
 
@@ -362,19 +369,94 @@ Each preset is documented in godoc with standard references (NIST SP 800-63B, PC
 
 You can still override after calling a preset, e.g. `cfg := passcheck.NISTConfig(); cfg.CustomPasswords = myList`.
 
+### Passphrase Recognition & Support
+
+Enable passphrase-friendly scoring for multi-word passwords. When `PassphraseMode` is enabled, the library detects passphrases using word boundaries (spaces, hyphens, camelCase, snake_case) and uses word-based entropy instead of character-based entropy.
+
+```go
+cfg := passcheck.DefaultConfig()
+cfg.PassphraseMode = true
+cfg.MinWords = 4              // Require at least 4 distinct words
+cfg.WordDictSize = 7776       // Diceware standard dictionary size
+
+result, _ := passcheck.CheckWithConfig("correct-horse-battery-staple", cfg)
+// Uses word-based entropy: 4 words × log₂(7776) ≈ 51 bits
+// Dictionary penalties are eliminated (words are expected in passphrases)
+```
+
+**Key characteristics:**
+- Detects multi-word passphrases automatically
+- Uses word-based entropy (diceware model) instead of character-based entropy
+- Eliminates dictionary penalties for detected passphrases
+- Adds passphrase bonus to the score
+- Works with all entropy modes (simple, advanced, pattern-aware)
+
+See [internal/passphrase](internal/passphrase/) for implementation details.
+
+### Advanced Entropy Calculation
+
+Choose from three entropy calculation modes to match your security requirements:
+
+```go
+cfg := passcheck.DefaultConfig()
+
+// Simple mode (default): Basic character-pool × length formula
+cfg.EntropyMode = passcheck.EntropyModeSimple
+
+// Advanced mode: Reduces entropy for detected patterns
+cfg.EntropyMode = passcheck.EntropyModeAdvanced
+// "qwerty123456" will have lower entropy than "Xk9$mP2!vR7@nL4"
+
+// Pattern-aware mode: Includes Markov-chain analysis
+cfg.EntropyMode = passcheck.EntropyModePatternAware
+// Most accurate entropy estimation, accounts for character transition probabilities
+
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+**When to use each mode:**
+- **Simple**: Fast, backward-compatible, suitable for most use cases
+- **Advanced**: Better accuracy for passwords with patterns (keyboard walks, sequences)
+- **Pattern-aware**: Maximum accuracy, includes Markov-chain character transition analysis
+
+### Configurable Scoring Weights
+
+Customize penalty multipliers and entropy weight to match your organization's security priorities:
+
+```go
+cfg := passcheck.DefaultConfig()
+cfg.PenaltyWeights = &passcheck.PenaltyWeights{
+    DictionaryMatch: 2.0,  // Double dictionary penalties
+    PatternMatch:    1.5,  // Increase pattern penalties by 50%
+    EntropyWeight:   0.8,  // Reduce entropy influence (penalties matter more)
+}
+
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+**Use cases:**
+- **Strict enterprise**: Increase all penalty multipliers (2.0–3.0×)
+- **Passphrase-friendly**: Reduce pattern penalties, increase entropy weight
+- **Dictionary-focused**: Heavily penalize dictionary matches (3.0–5.0×)
+- **Entropy-focused**: Increase entropy weight (1.2–1.5×) to favor high-entropy passwords
+
+All weights default to 1.0 when `PenaltyWeights` is nil or when individual fields are zero. See [docs/WEIGHT_TUNING.md](docs/WEIGHT_TUNING.md) for detailed examples and best practices.
+
 ### WebAssembly (client-side)
 
 For instant client-side feedback in the browser without a server round-trip, use the WebAssembly build. There are two options:
 
 #### Modern TypeScript/Vite Web App
 
-The [modern web application](wasm/web/README.md) provides a premium UI with TypeScript, Vite, and Web Workers for optimal performance. Build with `make wasm-web`, then start the dev server with `make serve-wasm-web` (or `cd wasm/web && npm install && npm run dev`). Features include:
+The [modern web application](wasm/web/README.md) provides a premium UI with TypeScript, Vite, and Web Workers for optimal performance. Build with `make wasm`, then start the dev server with `make serve-wasm` (or `cd wasm/web && npm install && npm run dev`). Features include:
 
 - **Modern UI**: Dark mode interface with real-time feedback
 - **TypeScript**: Type-safe client code
 - **Web Workers**: Non-blocking password checks
-- **Configurable Rules**: Full configuration panel with presets
+- **Policy Presets**: NIST, PCI-DSS, OWASP, Enterprise, UserFriendly with automatic field locking
+- **Full Configuration**: All library features configurable via UI (entropy modes, penalty weights, passphrase mode)
 - **HIBP Integration**: Secure breach database checks
+- **Policy Enforcement**: When a policy is selected, relevant parameters are locked to ensure compliance
 
 See [wasm/web/README.md](wasm/web/README.md) for installation and usage instructions.
 
@@ -402,6 +484,10 @@ The middleware extracts the password from JSON or form body, runs passcheck, and
 - `MaxRepeats >= 2`
 - `PatternMinLength >= 3`
 - `MaxIssues >= 0`
+- `MinWords >= 1` when `PassphraseMode` is true
+- `WordDictSize >= 2` when `PassphraseMode` is true
+- `MinExecutionTimeMs >= 0` when set
+- All `PenaltyWeights` fields must be `>= 0` (negative weights are invalid)
 
 `CheckWithConfig` calls `Validate()` automatically and returns an error
 for invalid configurations.
@@ -427,8 +513,11 @@ truncated.
 - The built-in dictionary contains ~950 common passwords and ~490 common
   words. For breach detection, use the optional [hibp](hibp/) package
   (k-anonymity; see [Breach database (HIBP)](#breach-database-hibp)).
-- Entropy is estimated from character-set diversity and length, not from the
-  full distribution of possible passwords.
+- Entropy estimation supports multiple modes:
+  - **Simple mode** (default): Character-set diversity × length formula
+  - **Advanced mode**: Reduces entropy for detected patterns (keyboard walks, sequences, repeated blocks)
+  - **Pattern-aware mode**: Includes Markov-chain analysis for character transition probabilities
+- For passphrases, word-based entropy uses a diceware model (word count × log₂(dictionary size))
 
 ## Architecture
 
@@ -443,8 +532,9 @@ passcheck/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats
 │   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution
 │   ├── dictionary/     # Dictionary checks: common passwords, common words
-│   ├── entropy/        # Shannon entropy calculation
-│   ├── scoring/        # Weighted scoring algorithm
+│   ├── entropy/        # Entropy calculation (simple, advanced, pattern-aware modes)
+│   ├── passphrase/     # Passphrase detection and word-based entropy
+│   ├── scoring/        # Weighted scoring algorithm with configurable penalty weights
 │   ├── feedback/       # Issue dedup, priority sort, positive feedback
 │   ├── leet/           # Shared leetspeak normalisation utilities
 │   └── safemem/        # Secure memory zeroing
