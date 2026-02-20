@@ -1704,7 +1704,62 @@ func BenchmarkCheckBytes(b *testing.B) {
 	}
 }
 
+func TestRedactSensitive(t *testing.T) {
+	t.Run("RedactionEnabled", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.RedactSensitive = true
+		cfg.CustomWords = []string{"password"}
+
+		// Trigger a dictionary match
+		result, err := CheckWithConfig("mypassword123!", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		found := false
+		for _, iss := range result.Issues {
+			if iss.Code == CodeDictCommonWord {
+				found = true
+				if strings.Contains(iss.Message, "'password'") {
+					t.Errorf("expected redacted message, got: %q", iss.Message)
+				}
+				if !strings.Contains(iss.Message, "'***'") {
+					t.Errorf("expected redacted message to contain '***', got: %q", iss.Message)
+				}
+			}
+		}
+		if !found {
+			t.Error("expected dictionary issue to be found")
+		}
+	})
+
+	t.Run("RedactionDisabled", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.RedactSensitive = false
+		cfg.CustomWords = []string{"password"}
+
+		result, err := CheckWithConfig("mypassword123!", cfg)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		found := false
+		for _, iss := range result.Issues {
+			if iss.Code == CodeDictCommonWord {
+				found = true
+				if !strings.Contains(iss.Message, "'password'") {
+					t.Errorf("expected full message, got: %q", iss.Message)
+				}
+			}
+		}
+		if !found {
+			t.Error("expected dictionary issue to be found")
+		}
+	})
+}
+
 func BenchmarkCheck_VeryLong(b *testing.B) {
+
 	// Ensure the truncation cap keeps performance bounded.
 	pw := strings.Repeat("aB3!xY7@", 200) // 1600 chars → truncated to 1024
 	for i := 0; i < b.N; i++ {

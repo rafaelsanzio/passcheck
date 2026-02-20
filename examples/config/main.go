@@ -16,7 +16,13 @@ import (
 	"github.com/rafaelsanzio/passcheck"
 )
 
+//
+// Security Note: These examples print passwords and results to stdout for
+// demonstration. Production code should not log or print passwords or raw
+// issue messages (which may contain password substrings). Use
+// Config.RedactSensitive = true to mask substrings in issue messages.
 func main() {
+
 	password := "MyDogMax1"
 
 	// --- Default configuration ---
@@ -53,9 +59,17 @@ func main() {
 	printResult("MyDogMax1", custom)
 	printResult("iloveacmecorp99", custom)
 
+	// --- Redaction demo ---
+	fmt.Println("=== Redaction Demo (RedactSensitive=true) ===")
+	redacted := passcheck.DefaultConfig()
+	redacted.RedactSensitive = true
+	redacted.CustomWords = []string{"password"}
+	printResult("mypassword123!", redacted)
+
 	// --- Validation demo ---
 	fmt.Println("=== Invalid Config Demo ===")
 	bad := passcheck.Config{MinLength: 0}
+
 	if err := bad.Validate(); err != nil {
 		fmt.Printf("Validation error: %v\n", err)
 	}

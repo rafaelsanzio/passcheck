@@ -15,7 +15,13 @@ import (
 	"github.com/rafaelsanzio/passcheck"
 )
 
+//
+// Security Note: These examples print passwords and results to stdout for
+// demonstration. Production code should not log or print passwords or raw
+// issue messages (which may contain password substrings). Use
+// Config.RedactSensitive = true to mask substrings in issue messages.
 func main() {
+
 	passwords := []string{
 		"",
 		"password",

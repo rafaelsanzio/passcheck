@@ -232,7 +232,8 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	suggestions := feedback.GeneratePositive(pw, issueSet, e)
 
 	// Convert internal issues to public Issue type.
-	issues := toPublicIssues(refined)
+	issues := toPublicIssues(refined, cfg.RedactSensitive)
+
 	if suggestions == nil {
 		suggestions = []string{}
 	}
@@ -464,20 +465,39 @@ func configToInternal(password string, cfg Config) internalOptions {
 }
 
 // toPublicIssues converts internal issues to the public Issue type.
-func toPublicIssues(refined []issue.Issue) []Issue {
+// If redact is true, it masks potential password substrings in messages.
+func toPublicIssues(refined []issue.Issue, redact bool) []Issue {
 	if len(refined) == 0 {
 		return nil
 	}
 	out := make([]Issue, len(refined))
 	for i, iss := range refined {
+		msg := iss.Message
+		if redact {
+			msg = redactMessage(msg)
+		}
 		out[i] = Issue{
 			Code:     iss.Code,
-			Message:  iss.Message,
+			Message:  msg,
 			Category: iss.Category,
 			Severity: iss.Severity,
 		}
 	}
 	return out
 }
+
+// redactMessage replaces content inside single quotes with '***'.
+func redactMessage(msg string) string {
+	start := strings.Index(msg, "'")
+	if start == -1 {
+		return msg
+	}
+	end := strings.LastIndex(msg, "'")
+	if end <= start {
+		return msg
+	}
+	return msg[:start+1] + "***" + msg[end:]
+}
+
 
 

@@ -270,6 +270,8 @@ if err != nil {
 | `PenaltyWeights`     | `*PenaltyWeights`  | nil     | Custom penalty multipliers and entropy weight; when nil, defaults to 1.0 for all weights                                                |
 | `ConstantTimeMode`   | `bool`             | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
 | `MinExecutionTimeMs` | `int`              | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
+| `RedactSensitive`    | `bool`             | false   | Mask password substrings in issue messages (e.g., `'***'`) to prevent logging sensitive data                                          |
+
 
 ### Custom Blocklists
 
@@ -492,32 +494,15 @@ The middleware extracts the password from JSON or form body, runs passcheck, and
 `CheckWithConfig` calls `Validate()` automatically and returns an error
 for invalid configurations.
 
-## Security Considerations
-
-**Memory handling:** Go strings are immutable and garbage-collected — the library
-cannot zero them after use. For applications that receive passwords as `[]byte`
-(HTTP request bodies, terminal reads), use `CheckBytes` or `CheckBytesWithConfig`
-which zero the input slice immediately after analysis.
-
-**No logging:** The library never logs, prints, or persists passwords. Results
-contain only aggregate scores and generic issue descriptions.
-
-**Input limits:** A maximum of 1024 runes is analysed per password to prevent
-denial-of-service through algorithmic complexity. Inputs beyond this are silently
-truncated.
-
-**Limitations:**
-
-- The Go runtime may retain copies of string data in CPU caches, swap, or core
-  dumps. `CheckBytes` reduces — but does not eliminate — the window of exposure.
-- The built-in dictionary contains ~950 common passwords and ~490 common
-  words. For breach detection, use the optional [hibp](hibp/) package
-  (k-anonymity; see [Breach database (HIBP)](#breach-database-hibp)).
-- Entropy estimation supports multiple modes:
-  - **Simple mode** (default): Character-set diversity × length formula
-  - **Advanced mode**: Reduces entropy for detected patterns (keyboard walks, sequences, repeated blocks)
-  - **Pattern-aware mode**: Includes Markov-chain analysis for character transition probabilities
 - For passphrases, word-based entropy uses a diceware model (word count × log₂(dictionary size))
+
+## Security Best Practices
+
+1.  **Do not log Result.Issues raw**: Issue messages may contain password substrings (e.g., dictionary matches). Log only the `Code` or use `Config.RedactSensitive = true` to mask these substrings.
+2.  **Prefer CheckBytes**: When passwords are available as `[]byte` (e.g., from HTTP request bodies), use `CheckBytes` or `CheckBytesWithConfig` to ensure the buffer is zeroed immediately after analysis.
+3.  **Enable ConstantTimeMode**: For high-assurance or remote-attacker scenarios, enable `ConstantTimeMode` to mitigate timing side channels in dictionary lookups.
+4.  **Run Security Tooling**: Integrity checks like `govulncheck` and `gosec` are recommended. Use `make security` to run them locally.
+
 
 ## Architecture
 

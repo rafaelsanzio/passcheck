@@ -143,7 +143,14 @@ type Config struct {
 	// For example, setting DictionaryMatch to 2.0 doubles dictionary penalties,
 	// while setting EntropyWeight to 0.5 reduces the influence of entropy on the score.
 	PenaltyWeights *PenaltyWeights
+
+	// RedactSensitive, when true, masks potential password substrings in
+	// issue messages (e.g., "Contains common word: '***'"). This prevents
+	// sensitive substrings from being inadvertently logged or persisted.
+	// Default: false (full messages returned).
+	RedactSensitive bool
 }
+
 
 // PenaltyWeights allows customization of penalty multipliers and entropy weight
 // for password strength scoring. All weights default to 1.0 when nil or when

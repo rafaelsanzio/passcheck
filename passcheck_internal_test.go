@@ -58,7 +58,7 @@ func TestToPublicIssues(t *testing.T) {
 		},
 	}
 
-	public := toPublicIssues(internal)
+	public := toPublicIssues(internal, false)
 
 	if len(public) != 1 {
 		t.Fatalf("expected 1 issue, got %d", len(public))

@@ -79,6 +79,25 @@ lint: ## Run go vet.
 lint-ci: ## Run golangci-lint (install: https://golangci-lint.run/welcome/install/).
 	golangci-lint run --timeout=5m
 
+# ─── Security ─────────────────────────────────────────────────────────────────
+
+.PHONY: security-vuln
+security-vuln: ## Run govulncheck for known vulnerabilities.
+	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck not found. Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; echo "Ensure \$$(go env GOPATH)/bin is in your PATH."; exit 1; }
+	govulncheck ./...
+
+.PHONY: security-gosec
+security-gosec: ## Run gosec security linter (install: go install github.com/securego/gosec/v2/cmd/gosec@latest).
+	gosec -fmt=text ./...
+
+.PHONY: security
+security: lint security-vuln ## Run go vet and govulncheck. Use security-gosec for additional checks.
+	@echo "  security: vet + govulncheck done"
+
+.PHONY: check
+check: lint test security ## Run all quality and security checks (lint, test, security-vuln).
+	@echo "  all checks passed"
+
 # ─── Maintenance ──────────────────────────────────────────────────────────────
 
 .PHONY: clean
