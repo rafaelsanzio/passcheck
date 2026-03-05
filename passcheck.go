@@ -209,7 +209,6 @@ func Check(password string) Result {
 	return result
 }
 
-
 // CheckWithConfig evaluates the strength of a password using a custom
 // configuration. It returns an error if the configuration is invalid.
 //
@@ -234,7 +233,7 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	pw := truncate(password)
 
 	// Collect issues by category for weighted scoring.
-	opts := configToInternal(password, cfg)
+	opts := configToInternal(cfg)
 	issueSet := scoring.IssueSet{
 		Rules:      rules.CheckWith(pw, opts.rules),
 		Patterns:   patterns.CheckWith(pw, opts.patterns),
@@ -467,7 +466,7 @@ type internalOptions struct {
 }
 
 // configToInternal maps the public Config to internal package option structs.
-func configToInternal(password string, cfg Config) internalOptions {
+func configToInternal(cfg Config) internalOptions {
 	return internalOptions{
 		rules: rules.Options{
 			MinLength:     cfg.MinLength,
@@ -498,7 +497,7 @@ func configToInternal(password string, cfg Config) internalOptions {
 	}
 }
 
-// resolveVerdict maps score to a verdict string, honouring custom thresholds
+// resolveVerdict maps score to a verdict string, honoring custom thresholds
 // when provided and falling back to the built-in scoring defaults when t is nil.
 func resolveVerdict(score int, t *VerdictThresholds) string {
 	if t == nil {
@@ -548,6 +547,3 @@ func redactMessage(msg string) string {
 	end := start + 1 + relEnd
 	return msg[:start+1] + "***" + msg[end:]
 }
-
-
-

@@ -1,29 +1,28 @@
 // Package scoring implements the password strength scoring algorithm.
 //
 // This file provides weight application logic for customizable penalty multipliers.
-
 package scoring
 
 // Weights holds penalty multipliers and entropy weight for customizable scoring.
 // Zero values are treated as defaults (1.0).
 type Weights struct {
-	RuleViolation  float64 // Multiplier for rule violation penalties
-	PatternMatch   float64 // Multiplier for pattern detection penalties
+	RuleViolation   float64 // Multiplier for rule violation penalties
+	PatternMatch    float64 // Multiplier for pattern detection penalties
 	DictionaryMatch float64 // Multiplier for dictionary match penalties
-	ContextMatch   float64 // Multiplier for context detection penalties
-	HIBPBreach     float64 // Multiplier for HIBP breach penalties
-	EntropyWeight  float64 // Multiplier for entropy base score
+	ContextMatch    float64 // Multiplier for context detection penalties
+	HIBPBreach      float64 // Multiplier for HIBP breach penalties
+	EntropyWeight   float64 // Multiplier for entropy base score
 }
 
 // DefaultWeights returns weights with all multipliers set to 1.0 (default behavior).
 func DefaultWeights() Weights {
 	return Weights{
-		RuleViolation:  1.0,
-		PatternMatch:   1.0,
+		RuleViolation:   1.0,
+		PatternMatch:    1.0,
 		DictionaryMatch: 1.0,
-		ContextMatch:   1.0,
-		HIBPBreach:     1.0,
-		EntropyWeight:  1.0,
+		ContextMatch:    1.0,
+		HIBPBreach:      1.0,
+		EntropyWeight:   1.0,
 	}
 }
 

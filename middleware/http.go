@@ -43,10 +43,12 @@ func (e *httpExtractor) extractJSON(r *http.Request) (string, error) {
 	if r.Body == nil {
 		return "", nil
 	}
-	body, err := io.ReadAll(r.Body)
-	r.Body.Close()
-	if err != nil {
-		return "", err
+	body, readErr := io.ReadAll(r.Body)
+	if closeErr := r.Body.Close(); closeErr != nil && readErr == nil {
+		readErr = closeErr
+	}
+	if readErr != nil {
+		return "", readErr
 	}
 	// Restore body for the next handler.
 	r.Body = io.NopCloser(bytes.NewReader(body))

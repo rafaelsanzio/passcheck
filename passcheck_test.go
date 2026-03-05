@@ -1442,11 +1442,11 @@ func TestCheckWithConfig_PenaltyWeights(t *testing.T) {
 		// Double all penalties
 		cfgDoubleAll := DefaultConfig()
 		cfgDoubleAll.PenaltyWeights = &PenaltyWeights{
-			RuleViolation:  2.0,
-			PatternMatch:   2.0,
+			RuleViolation:   2.0,
+			PatternMatch:    2.0,
 			DictionaryMatch: 2.0,
-			ContextMatch:   2.0,
-			HIBPBreach:     2.0,
+			ContextMatch:    2.0,
+			HIBPBreach:      2.0,
 		}
 		resultDoubleAll, err := CheckWithConfig(password, cfgDoubleAll)
 		if err != nil {
@@ -1585,10 +1585,10 @@ func TestCheckWithConfig_PenaltyWeights(t *testing.T) {
 
 		cfg := DefaultConfig()
 		cfg.PenaltyWeights = &PenaltyWeights{
-			RuleViolation:  1.5,
-			PatternMatch:   0.5, // Reduce pattern penalties
+			RuleViolation:   1.5,
+			PatternMatch:    0.5, // Reduce pattern penalties
 			DictionaryMatch: 2.0, // Increase dictionary penalties
-			EntropyWeight:  0.8,  // Slightly reduce entropy influence
+			EntropyWeight:   0.8, // Slightly reduce entropy influence
 		}
 
 		result, err := CheckWithConfig(password, cfg)

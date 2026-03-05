@@ -53,7 +53,7 @@ func NewMemoryCacheWithTTL(maxEntries int, ttl time.Duration) *MemoryCache {
 // Get returns the cached value for key if present and not expired.
 //
 // The common (non-expired) path acquires only a read lock so that
-// concurrent reads do not serialise behind a single write lock.
+// concurrent reads do not serialize behind a single write lock.
 // A write lock is acquired only when an expired entry must be evicted.
 func (m *MemoryCache) Get(key string) (value string, ok bool) {
 	m.mu.RLock()

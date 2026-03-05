@@ -10,9 +10,10 @@
 // Run: go run ./examples/middleware
 //
 // Test:
-//   curl -X POST http://localhost:8080/register \
-//     -H 'Content-Type: application/json' \
-//     -d '{"password":"weak123"}'
+//
+//	curl -X POST http://localhost:8080/register \
+//	  -H 'Content-Type: application/json' \
+//	  -d '{"password":"weak123"}'
 package main
 
 import (
@@ -38,10 +39,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	
+
 	// Wrap the registration handler with middleware
 	mux.Handle("/register", middleware.HTTP(cfg, http.HandlerFunc(handleRegister)))
-	
+
 	// Health check (no middleware)
 	mux.HandleFunc("/health", handleHealth)
 

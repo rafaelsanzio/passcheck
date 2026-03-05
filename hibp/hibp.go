@@ -120,7 +120,7 @@ func (c *Client) CheckHashContext(ctx context.Context, hash string) (breached bo
 
 	// 1. Check offline database first, if configured.
 	if c.OfflineDB != nil {
-		if present, err := c.OfflineDB.Has(ctx, hash); err == nil && present {
+		if present, offlineErr := c.OfflineDB.Has(ctx, hash); offlineErr == nil && present {
 			// In offline mode (especially Bloom filters), we don't know the exact count,
 			// but we know it's breached. We return count=1 to signify a breach.
 			return true, 1, nil
@@ -199,7 +199,7 @@ func (c *Client) fetchRange(ctx context.Context, prefix string) (string, error) 
 
 		lastErr = err
 
-		// If the server sent a Retry-After header, honour it and then
+		// If the server sent a Retry-After header, honor it and then
 		// continue to the next attempt (do not consume the back-off budget).
 		if retryAfter > 0 {
 			select {
@@ -248,7 +248,11 @@ func (c *Client) fetchRangeOnce(ctx context.Context, prefix string) (body string
 	if err != nil {
 		return "", 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		ra := parseRetryAfter(resp.Header.Get("Retry-After"))
@@ -280,16 +284,16 @@ func (c *Client) retryDelay(attempt int) time.Duration {
 	return exp + jitter(base)
 }
 
-// jitter returns a random duration in [0, cap).
-func jitter(cap time.Duration) time.Duration {
-	if cap <= 0 {
+// jitter returns a random duration in [0, maxDur).
+func jitter(maxDur time.Duration) time.Duration {
+	if maxDur <= 0 {
 		return 0
 	}
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return 0
 	}
-	return time.Duration(binary.LittleEndian.Uint64(b[:]) % uint64(cap))
+	return time.Duration(binary.LittleEndian.Uint64(b[:]) % uint64(maxDur))
 }
 
 // parseRetryAfter parses the Retry-After header value. It supports the

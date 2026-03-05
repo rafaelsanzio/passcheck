@@ -1,14 +1,14 @@
-# golangci-lint configuration for passcheck.
+# golangci-lint v2 configuration for passcheck.
 # See https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
   timeout: 5m
 
 linters:
   enable:
-    # Default linters (always on).
+    # Core correctness.
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
@@ -16,8 +16,6 @@ linters:
     - gosec
 
     # Style & correctness.
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - unparam
@@ -31,65 +29,137 @@ linters:
     - reassign
     - wastedassign
 
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # not a bug, just a suggestion
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # layout suggestion, not a bug
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - ifElseChain # we prefer switch; not always applicable
-      - hugeParam # internal structs are small
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - ifElseChain # we prefer switch; not always applicable
+        - hugeParam   # internal structs are small
 
-  revive:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: redefines-builtin-id
+        - name: package-comments
+        - name: unused-parameter
+          disabled: true # HTTP handlers and callbacks legitimately have unused params
+
+    misspell:
+      locale: US
+
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: increment-decrement
-      - name: var-naming
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: unused-parameter
-        disabled: true # too noisy for checker callbacks
+      # Test files: errcheck on ResponseWriter/Body writes is standard boilerplate;
+      # gocritic and revive are too noisy for test helpers.
+      - path: "_test\\.go"
+        linters:
+          - errcheck
+          - gocritic
+          - revive
 
-  misspell:
-    locale: US
+      # Example programs intentionally omit error handling for readability.
+      - path: "examples/"
+        linters:
+          - errcheck
+          - revive
 
-issues:
-  # Don't limit the number of issues per linter.
-  max-issues-per-linter: 0
-  max-same-issues: 0
+      # main() entry point does not need a doc comment.
+      - path: "main\\.go"
+        linters:
+          - revive
+        text: "exported: exported function"
 
-  exclude-rules:
-    # Test files can use dot-imports and skip error checks.
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gocritic
-        - revive
+      # internal/context is named after the domain concept (context words),
+      # not the stdlib context package.
+      - path: "internal/context/"
+        linters:
+          - revive
+        text: "var-naming:"
 
-    # Example programs are allowed to ignore errors for brevity.
-    - path: examples/
-      linters:
-        - errcheck
+      # ── gosec exclusions ────────────────────────────────────────────────────
 
-    # main() doesn't need a doc comment.
-    - path: main\.go
-      linters:
-        - revive
-      text: "exported: exported function"
+      # HIBP k-anonymity API requires SHA-1 by specification.
+      # https://haveibeenpwned.com/API/v3#SearchingPwnedPasswordsByRange
+      - path: "hibp/"
+        linters: [gosec]
+        text: "G505:"
+      - path: "hibp/"
+        linters: [gosec]
+        text: "G401:"
+
+      # False-positive SSRF: the URL is taken from the client's BaseURL config
+      # field, not from user-supplied input.
+      - path: "hibp/"
+        linters: [gosec]
+        text: "G704:"
+
+      # Intentional uint64 → time.Duration conversion for bounded jitter.
+      - path: "hibp/"
+        linters: [gosec]
+        text: "G115:"
+
+      # Intentional int → byte truncation in constant-time bit extraction.
+      - path: "internal/safemem/"
+        linters: [gosec]
+        text: "G115:"
+
+      # Test variables named "password" are test data, not hardcoded credentials.
+      # G104 (errors unhandled) is already covered by errcheck exclusion for tests.
+      - path: "_test\\.go"
+        linters: [gosec]
+        text: "G101:"
+
+      - path: "_test\\.go"
+        linters: [gosec]
+        text: "G104:"
+
+      - path: "example_test\\.go"
+        linters: [gosec]
+        text: "G101:"
+
+      # Issue-code constants like "DICT_COMMON_PASSWORD" are identifiers,
+      # not credentials.
+      - path: "internal/issue/"
+        linters: [gosec]
+        text: "G101:"
+
+      # Example servers intentionally use ListenAndServe without timeout
+      # for demo brevity.
+      - path: "examples/"
+        linters: [gosec]
+        text: "G114:"
+
+      # examples/webserver uses a "Password" JSON field as the expected
+      # request key name, not a stored secret.
+      - path: "examples/"
+        linters: [gosec]
+        text: "G117:"
+
+      # CLI tool writes password check results to stdout, not an HTTP response.
+      # G705 (XSS via taint analysis) is not applicable to terminal output.
+      - path: "cmd/"
+        linters: [gosec]
+        text: "G705:"

@@ -24,11 +24,11 @@ func main() {
 		{"Enterprise", passcheck.EnterpriseConfig()},
 	}
 
-	for _, p := range presets {
-		result, err := passcheck.CheckWithConfig(password, p.cfg)
+	for i := range presets {
+		result, err := passcheck.CheckWithConfig(password, presets[i].cfg)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%-25s score=%3d  verdict=%s\n", p.name+":", result.Score, result.Verdict)
+		fmt.Printf("%-25s score=%3d  verdict=%s\n", presets[i].name+":", result.Score, result.Verdict)
 	}
 }

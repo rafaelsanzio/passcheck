@@ -6,7 +6,6 @@
 // intrinsic entropy — the bits needed to describe the pattern choice to an
 // attacker who already knows the pattern class — while uncovered characters
 // contribute the standard character-pool entropy.
-
 package entropy
 
 import (

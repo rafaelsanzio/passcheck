@@ -91,11 +91,9 @@ func Calculate(password string) float64 {
 // AnalyzeCharsets performs a single pass over the password to determine
 // which character set types are present and counts the number of runes.
 // Uses the unicode package for correct handling of non-ASCII letters and digits.
-func AnalyzeCharsets(password string) (CharsetInfo, int) {
-	var info CharsetInfo
-	count := 0
+func AnalyzeCharsets(password string) (info CharsetInfo, runeCount int) {
 	for _, r := range password {
-		count++
+		runeCount++
 		switch {
 		case unicode.IsLower(r):
 			info.HasLower = true
@@ -107,6 +105,6 @@ func AnalyzeCharsets(password string) (CharsetInfo, int) {
 			info.HasSymbol = true
 		}
 	}
-	return info, count
+	return info, runeCount
 }
 

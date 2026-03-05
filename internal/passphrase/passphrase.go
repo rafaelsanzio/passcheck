@@ -44,7 +44,7 @@ func Detect(password string, minWords int) Info {
 // 3. snake_case boundaries (underscores)
 // 4. Consecutive digits or symbols as separators
 func extractWords(password string) []string {
-	if len(password) == 0 {
+	if password == "" {
 		return nil
 	}
 

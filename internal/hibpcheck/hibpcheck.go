@@ -1,3 +1,5 @@
+// Package hibpcheck integrates Have I Been Pwned breach checks into
+// the passcheck scoring pipeline.
 package hibpcheck
 
 import (
@@ -40,7 +42,6 @@ func CheckWith(password string, opts Options) []issue.Issue {
 			breached, count = false, 0
 		}
 	}
-
 
 	minOcc := opts.MinOccurrences
 	if minOcc < 1 {

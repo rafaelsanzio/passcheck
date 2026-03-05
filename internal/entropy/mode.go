@@ -1,7 +1,6 @@
 // Package entropy implements password entropy calculation.
 //
 // This file provides mode selection logic for different entropy calculation methods.
-
 package entropy
 
 import (
@@ -24,7 +23,7 @@ const (
 
 // CalculateWithMode calculates entropy using the specified mode.
 // If mode is empty or invalid, falls back to simple mode.
-func CalculateWithMode(password string, mode string, patternIssues []issue.Issue) float64 {
+func CalculateWithMode(password, mode string, patternIssues []issue.Issue) float64 {
 	switch Mode(mode) {
 	case ModeAdvanced:
 		return CalculateAdvanced(password, patternIssues)

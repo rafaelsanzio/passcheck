@@ -2,7 +2,6 @@
 //
 // This file provides constant-time comparison primitives to reduce
 // timing side channels when comparing secrets (e.g. password blocklists).
-
 package safemem
 
 import "crypto/subtle"

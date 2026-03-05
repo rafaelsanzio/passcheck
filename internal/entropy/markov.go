@@ -3,7 +3,6 @@
 // This file provides Markov-chain analysis for character transition probabilities
 // to estimate entropy more accurately by considering how characters typically
 // follow each other in real passwords.
-
 package entropy
 
 import (
@@ -63,9 +62,9 @@ func calculateMarkovAdjustment(password string) float64 {
 // transitionInfo holds information about character transitions.
 type transitionInfo struct {
 	// Character type transitions (letter→letter, digit→digit, etc.)
-	sameTypeTransitions int
+	sameTypeTransitions  int
 	mixedTypeTransitions int
-	totalTransitions int
+	totalTransitions     int
 
 	// Case transitions (lower→upper, upper→lower)
 	caseTransitions int

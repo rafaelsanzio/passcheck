@@ -20,7 +20,7 @@ const DefaultWordDictSize = 7776
 // dictSize is the assumed dictionary size (default: 7776 for diceware).
 //
 // Returns 0 if wordCount is 0 or dictSize is <= 1.
-func CalculateWordEntropy(wordCount int, dictSize int) float64 {
+func CalculateWordEntropy(wordCount, dictSize int) float64 {
 	if wordCount <= 0 || dictSize <= 1 {
 		return 0
 	}
