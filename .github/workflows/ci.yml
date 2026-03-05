@@ -27,7 +27,7 @@ jobs:
       # Official action handles caching and exact version pinning —
       # avoids the fragility of `go install golangci-lint@latest`.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.10.0
           args: --timeout=5m
