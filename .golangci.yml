@@ -1,6 +1,5 @@
 # golangci-lint configuration for passcheck.
 # See https://golangci-lint.run/usage/configuration/
-version: "2"
 
 run:
   timeout: 5m
@@ -45,7 +44,7 @@ linters-settings:
       - performance
     disabled-checks:
       - ifElseChain # we prefer switch; not always applicable
-      - hugeParam   # internal structs are small
+      - hugeParam # internal structs are small
 
   revive:
     rules:
