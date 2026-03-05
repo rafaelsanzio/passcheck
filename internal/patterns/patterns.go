@@ -44,6 +44,7 @@ func CheckWith(password string, opts Options) []issue.Issue {
 	checkers := []checker{
 		func(pw string) []issue.Issue { return checkKeyboard(pw, opts) },
 		func(pw string) []issue.Issue { return checkSequence(pw, opts) },
+		func(pw string) []issue.Issue { return CheckDates(pw, opts.SequenceMinLen) },
 		checkRepeatedBlocks,
 		checkSubstitution,
 	}

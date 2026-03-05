@@ -35,6 +35,7 @@ const (
 	CodePatternSequence     = "PATTERN_SEQUENCE"
 	CodePatternBlock        = "PATTERN_BLOCK"
 	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
+	CodePatternDate         = "PATTERN_DATE"
 
 	// Dictionary
 	CodeDictCommonPassword = "DICT_COMMON_PASSWORD"
@@ -55,6 +56,10 @@ type Issue struct {
 	Message  string // Human-readable description
 	Category string // "rule", "pattern", "dictionary"
 	Severity int    // 1 (low) – 3 (high)
+	// Pattern holds the verbatim matched substring for PATTERN_* codes.
+	// Empty for all non-pattern issues. Used by the entropy package to
+	// compute intrinsic pattern entropy without parsing Message text.
+	Pattern string
 }
 
 // New creates an Issue with the given fields.
@@ -64,5 +69,19 @@ func New(code, message, category string, severity int) Issue {
 		Message:  message,
 		Category: category,
 		Severity: severity,
+	}
+}
+
+// NewPattern creates a pattern Issue, attaching the matched substring in the
+// structured Pattern field. Use this for all PATTERN_* codes so downstream
+// consumers (e.g. entropy calculation) can read the pattern directly without
+// parsing the human-readable Message.
+func NewPattern(code, message, pattern, category string, severity int) Issue {
+	return Issue{
+		Code:     code,
+		Message:  message,
+		Category: category,
+		Severity: severity,
+		Pattern:  pattern,
 	}
 }

@@ -16,35 +16,31 @@ func TestCalculateWithMode_Simple(t *testing.T) {
 	}
 }
 
-func TestCalculateWithMode_Advanced(t *testing.T) {
+func TestCalculateWithMode_ReducesEntropyForPatternedPassword(t *testing.T) {
+	// Both advanced and pattern-aware modes must reduce entropy below simple
+	// for a password that is entirely covered by detected patterns.
 	password := "qwerty123456"
 	issues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", "qwerty", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: '123456'", "123456", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	simpleEntropy := Calculate(password)
-	advancedEntropy := CalculateWithMode(password, "advanced", issues)
 
-	if advancedEntropy >= simpleEntropy {
-		t.Errorf("advanced mode should reduce entropy: simple=%.2f, advanced=%.2f",
-			simpleEntropy, advancedEntropy)
+	tests := []struct {
+		mode string
+	}{
+		{"advanced"},
+		{"pattern-aware"},
 	}
-}
-
-func TestCalculateWithMode_PatternAware(t *testing.T) {
-	password := "qwerty123456"
-	issues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
-	}
-
-	simpleEntropy := Calculate(password)
-	patternAwareEntropy := CalculateWithMode(password, "pattern-aware", issues)
-
-	if patternAwareEntropy >= simpleEntropy {
-		t.Errorf("pattern-aware mode should reduce entropy: simple=%.2f, pattern-aware=%.2f",
-			simpleEntropy, patternAwareEntropy)
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			e := CalculateWithMode(password, tt.mode, issues)
+			if e >= simpleEntropy {
+				t.Errorf("%s mode should reduce entropy for patterned password: simple=%.2f, got=%.2f",
+					tt.mode, simpleEntropy, e)
+			}
+		})
 	}
 }
 
@@ -52,13 +48,13 @@ func TestCalculateWithMode_InvalidMode(t *testing.T) {
 	password := "Xk9$mP2!vR7@nL4"
 	simpleEntropy := Calculate(password)
 
-	// Invalid mode should fall back to simple
+	// Invalid mode should fall back to simple.
 	invalidEntropy := CalculateWithMode(password, "invalid", nil)
 	if invalidEntropy != simpleEntropy {
 		t.Errorf("invalid mode should fall back to simple: got %.2f, want %.2f", invalidEntropy, simpleEntropy)
 	}
 
-	// Empty mode should fall back to simple
+	// Empty mode should fall back to simple.
 	emptyEntropy := CalculateWithMode(password, "", nil)
 	if emptyEntropy != simpleEntropy {
 		t.Errorf("empty mode should fall back to simple: got %.2f, want %.2f", emptyEntropy, simpleEntropy)
@@ -66,13 +62,13 @@ func TestCalculateWithMode_InvalidMode(t *testing.T) {
 }
 
 func TestCalculateWithMode_Comparison(t *testing.T) {
-	// Test that "qwerty123456" has lower entropy than "Xk9$mP2!vR7@nL4" in advanced mode
+	// A heavily patterned password must score lower than a high-entropy random one.
 	patterned := "qwerty123456"
 	random := "Xk9$mP2!vR7@nL4"
 
 	patternedIssues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", "qwerty", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: '123456'", "123456", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	patternedEntropy := CalculateWithMode(patterned, "advanced", patternedIssues)

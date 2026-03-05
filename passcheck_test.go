@@ -91,16 +91,26 @@ func TestCheck(t *testing.T) {
 	})
 
 	t.Run("IssuesAreCategorized", func(t *testing.T) {
-		// A password with multiple kinds of issues should have them all listed.
+		// Every issue must have a non-empty Category and Code field.
 		result := Check("password")
 		if len(result.Issues) == 0 {
-			t.Error("'password' should have issues")
+			t.Fatal("'password' should have issues")
+		}
+		for _, iss := range result.Issues {
+			if iss.Category == "" {
+				t.Errorf("issue %q has empty Category", iss.Code)
+			}
+			if iss.Code == "" {
+				t.Error("issue has empty Code")
+			}
 		}
 	})
 
 	t.Run("ScoreReflectsLength", func(t *testing.T) {
-		short := Check("aB3!aB3!aB3!")        // 12 chars
-		long := Check("aB3!aB3!aB3!aB3!aB3!") // 20 chars
+		// Use non-patterned passwords so the entropy model differences between
+		// short and long are not masked by block-repetition detection.
+		short := Check("xK7$mP2!vR9@")        // 12 chars, no structural patterns
+		long := Check("xK7$mP2!vR9@nL4&eQ8%") // 20 chars, no structural patterns
 
 		if long.Score <= short.Score {
 			t.Errorf("longer password should score higher: short=%d, long=%d",
@@ -114,10 +124,12 @@ func TestCheck(t *testing.T) {
 		if len(result.Issues) == 0 {
 			t.Fatal("expected issues for 'password'")
 		}
-		// First issue should come from dictionary phase (most critical).
-		first := result.Issues[0]
-		if first.Message == "" {
-			t.Error("first issue message should not be empty")
+		// Issues must be ordered highest-severity first.
+		for i := 1; i < len(result.Issues); i++ {
+			if result.Issues[i].Severity > result.Issues[i-1].Severity {
+				t.Errorf("issues not sorted by descending severity: issue[%d].Severity=%d > issue[%d].Severity=%d",
+					i, result.Issues[i].Severity, i-1, result.Issues[i-1].Severity)
+			}
 		}
 	})
 
@@ -485,10 +497,10 @@ func TestCheckWithConfig(t *testing.T) {
 		cfg8 := DefaultConfig()
 		cfg8.MinLength = 8
 
-		// A 12-char password gets more bonus with MinLength=8 (4 extra chars)
-		// than with MinLength=12 (0 extra chars).
-		result8, _ := CheckWithConfig("aB3!aB3!aB3!", cfg8)
-		result12 := Check("aB3!aB3!aB3!")
+		// A 12-char non-patterned password gets more bonus with MinLength=8
+		// (4 extra chars) than with MinLength=12 (0 extra chars).
+		result8, _ := CheckWithConfig("xK7$mP2!vR9@", cfg8)
+		result12 := Check("xK7$mP2!vR9@")
 
 		if result8.Score <= result12.Score {
 			t.Errorf("lower MinLength should yield higher score: min8=%d, min12=%d",
@@ -1260,15 +1272,17 @@ func TestCheckWithConfig_EntropyMode(t *testing.T) {
 			t.Fatalf("CheckWithConfig failed: %v", err)
 		}
 
-		// Entropy should be similar (within 5% tolerance for Markov adjustments)
+		// Advanced mode: no patterns detected → all chars are free → should equal simple.
 		tolerance := resultSimple.Entropy * 0.05
 		if resultAdvanced.Entropy < resultSimple.Entropy-tolerance || resultAdvanced.Entropy > resultSimple.Entropy+tolerance {
-			t.Logf("Advanced mode entropy differs slightly (expected for random passwords): simple=%.2f, advanced=%.2f",
-				resultSimple.Entropy, resultAdvanced.Entropy)
+			t.Errorf("advanced mode entropy should equal simple when no patterns detected: simple=%.2f, advanced=%.2f (tolerance %.2f)",
+				resultSimple.Entropy, resultAdvanced.Entropy, tolerance)
 		}
-		if resultPatternAware.Entropy < resultSimple.Entropy-tolerance*2 || resultPatternAware.Entropy > resultSimple.Entropy+tolerance*2 {
-			t.Logf("Pattern-aware mode entropy differs (expected for Markov analysis): simple=%.2f, pattern-aware=%.2f",
-				resultSimple.Entropy, resultPatternAware.Entropy)
+		// Pattern-aware mode uses Markov-chain analysis and may legitimately diverge
+		// from simple (higher for truly random input, lower for predictable input).
+		// The only hard requirement is that it produces a positive value.
+		if resultPatternAware.Entropy <= 0 {
+			t.Errorf("pattern-aware entropy must be positive for non-empty password, got %.2f", resultPatternAware.Entropy)
 		}
 	})
 

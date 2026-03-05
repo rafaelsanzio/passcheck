@@ -30,7 +30,7 @@ func ExamplePCIDSSConfig() {
 	fmt.Printf("Verdict: %s\n", result.Verdict)
 
 	// Output:
-	// Score: 100
+	// Score: 93
 	// Verdict: Very Strong
 }
 
@@ -44,8 +44,8 @@ func ExampleOWASPConfig() {
 	fmt.Printf("Verdict: %s\n", result.Verdict)
 
 	// Output:
-	// Score: 44
-	// Verdict: Okay
+	// Score: 25
+	// Verdict: Weak
 }
 
 // ExampleEnterpriseConfig demonstrates strict enterprise configuration.

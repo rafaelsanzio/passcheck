@@ -21,6 +21,7 @@ const DefaultMinWordLen = 4
 //
 //go:generate go test -run "TestWordList" -count=1 -v
 var commonWords []string
+var commonMatcher *Matcher
 
 func init() {
 	raw := []string{
@@ -172,6 +173,8 @@ func init() {
 	sort.Slice(commonWords, func(i, j int) bool {
 		return len(commonWords[i]) > len(commonWords[j])
 	})
+
+	commonMatcher = NewMatcher(commonWords)
 }
 
 // findCommonWords returns all common dictionary words that appear as
@@ -183,41 +186,19 @@ func findCommonWords(password string, constantTime bool) []string {
 	if constantTime {
 		return findCommonWordsInConstantTime(password, commonWords)
 	}
-	return findCommonWordsIn(password, commonWords)
+	if len(password) < DefaultMinWordLen {
+		return nil
+	}
+	return filterToMaximalMatches(commonMatcher.FindAll(password))
 }
 
-// findCommonWordsIn is the core implementation shared by findCommonWords
-// and findCommonWordsWithCustom. It scans the (pre-sorted) wordlist for
-// substring matches, skipping regions already covered by longer words.
+// findCommonWordsIn is used as a fallback or for custom words processing.
 func findCommonWordsIn(password string, words []string) []string {
 	if len(password) < DefaultMinWordLen {
 		return nil
 	}
-
-	var matches []string
-	covered := make([]bool, len(password))
-
-	for _, word := range words {
-		if len(word) > len(password) {
-			continue
-		}
-
-		idx := strings.Index(password, word)
-
-		if idx < 0 {
-			continue
-		}
-
-		// Skip if this region is already covered by a longer match.
-		if isRegionCovered(covered, idx, len(word)) {
-			continue
-		}
-
-		markRegion(covered, idx, len(word))
-		matches = append(matches, word)
-	}
-
-	return matches
+	m := NewMatcher(words)
+	return filterToMaximalMatches(m.FindAll(password))
 }
 
 // findCommonWordsWithCustom merges custom words into the default word list,
@@ -296,21 +277,4 @@ func filterToMaximalMatches(matches []string) []string {
 	return kept
 }
 
-// isRegionCovered reports whether all bytes in s[start:start+length]
 
-// have already been covered by a previous match.
-func isRegionCovered(covered []bool, start, length int) bool {
-	for i := start; i < start+length; i++ {
-		if !covered[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// markRegion marks bytes in the covered slice for the given range.
-func markRegion(covered []bool, start, length int) {
-	for i := start; i < start+length; i++ {
-		covered[i] = true
-	}
-}

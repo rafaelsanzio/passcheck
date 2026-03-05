@@ -1,0 +1,41 @@
+name: WASM
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  wasm-size:
+    name: WASM Bundle Size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build WASM binary
+        run: GOOS=js GOARCH=wasm go build -o passcheck.wasm ./wasm
+
+      - name: Report bundle sizes
+        run: |
+          RAW=$(wc -c < passcheck.wasm)
+          GZ=$(gzip -9 -c passcheck.wasm | wc -c)
+          echo "## WASM Bundle Size" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Format  | Size |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ------- | ---- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Raw     | $(awk "BEGIN{printf \"%.1f KB\", $RAW/1024}") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| gzip -9 | $(awk "BEGIN{printf \"%.1f KB\", $GZ/1024}") |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: passcheck-wasm
+          path: passcheck.wasm
+          retention-days: 7

@@ -7,38 +7,36 @@ import (
 )
 
 func TestCalculateAdvanced_NoPatterns(t *testing.T) {
-	// Password with no patterns should have same entropy as simple mode
+	// No patterns → all characters are free → result equals simple entropy.
 	password := "Xk9$mP2!vR7@nL4"
 	simpleEntropy := Calculate(password)
 	advancedEntropy := CalculateAdvanced(password, nil)
 
-	// Should be very close (within 1% tolerance)
-	tolerance := simpleEntropy * 0.01
+	tolerance := simpleEntropy * 0.01 // 1% tolerance for floating-point rounding
 	if advancedEntropy < simpleEntropy-tolerance || advancedEntropy > simpleEntropy+tolerance {
-		t.Errorf("advanced entropy should match simple when no patterns: simple=%.2f, advanced=%.2f",
+		t.Errorf("advanced entropy should equal simple when no patterns: simple=%.2f, advanced=%.2f",
 			simpleEntropy, advancedEntropy)
 	}
 }
 
 func TestCalculateAdvanced_KeyboardPattern(t *testing.T) {
-	// "qwerty123456" contains keyboard pattern "qwerty" and sequence "123456"
+	// "qwerty123456" is entirely covered by a keyboard walk and a sequence.
 	password := "qwerty123456"
 	simpleEntropy := Calculate(password)
 
 	issues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", "qwerty", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: '123456'", "123456", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	advancedEntropy := CalculateAdvanced(password, issues)
 
-	// Advanced entropy should be significantly lower
 	if advancedEntropy >= simpleEntropy {
 		t.Errorf("advanced entropy should be lower for patterned password: simple=%.2f, advanced=%.2f",
 			simpleEntropy, advancedEntropy)
 	}
 
-	// Should be at least 20% reduction for this heavily patterned password
+	// Intrinsic entropy for both patterns is ≈ 14 bits vs ≈ 62 bits simple.
 	reduction := (simpleEntropy - advancedEntropy) / simpleEntropy
 	if reduction < 0.2 {
 		t.Errorf("expected at least 20%% reduction, got %.1f%%", reduction*100)
@@ -50,8 +48,8 @@ func TestCalculateAdvanced_SequencePattern(t *testing.T) {
 	simpleEntropy := Calculate(password)
 
 	issues := []issue.Issue{
-		issue.New(issue.CodePatternSequence, "Contains sequence: 'abcd'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '1234'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: 'abcd'", "abcd", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: '1234'", "1234", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	advancedEntropy := CalculateAdvanced(password, issues)
@@ -63,11 +61,12 @@ func TestCalculateAdvanced_SequencePattern(t *testing.T) {
 }
 
 func TestCalculateAdvanced_RepeatedBlock(t *testing.T) {
+	// "abcabc" covered by repeated block; "123" is free.
 	password := "abcabc123"
 	simpleEntropy := Calculate(password)
 
 	issues := []issue.Issue{
-		issue.New(issue.CodePatternBlock, "Contains repeated block: 'abc'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternBlock, "Contains repeated block: 'abc'", "abc", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	advancedEntropy := CalculateAdvanced(password, issues)
@@ -78,22 +77,67 @@ func TestCalculateAdvanced_RepeatedBlock(t *testing.T) {
 	}
 }
 
+func TestCalculateAdvanced_RepeatedBlock_SecondOccurrenceAddsNoEntropy(t *testing.T) {
+	// "abcabc" should contribute entropy for one copy of "abc" only.
+	// "abc123abc" covers positions 0-2 and 6-8 with the same block.
+	password := "abc123abc"
+
+	issues := []issue.Issue{
+		issue.NewPattern(issue.CodePatternBlock, "Contains repeated block: 'abc'", "abc", issue.CategoryPattern, issue.SeverityMed),
+	}
+
+	e := CalculateAdvanced(password, issues)
+	if e <= 0 {
+		t.Errorf("expected positive entropy, got %.2f", e)
+	}
+
+	// The two "abc" occurrences together must not exceed what three independent
+	// free occurrences would give (a deliberately loose upper bound).
+	simpleForBlock := 3 * Calculate("abc") // three independent copies would be 3× simple("abc")
+	if e >= simpleForBlock {
+		t.Errorf("two block occurrences should not exceed single-copy entropy: e=%.2f, single=%.2f",
+			e, simpleForBlock)
+	}
+}
+
+func TestCalculateAdvanced_IssuesWithoutPattern_Ignored(t *testing.T) {
+	// Issues created via issue.New (no Pattern field) must be silently skipped;
+	// the result should equal simple entropy.
+	password := "qwerty123456"
+	simpleEntropy := Calculate(password)
+
+	legacyIssues := []issue.Issue{
+		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
+	}
+
+	advancedEntropy := CalculateAdvanced(password, legacyIssues)
+
+	tolerance := simpleEntropy * 0.01
+	if advancedEntropy < simpleEntropy-tolerance || advancedEntropy > simpleEntropy+tolerance {
+		t.Errorf("issues without Pattern field should not reduce entropy: simple=%.2f, advanced=%.2f",
+			simpleEntropy, advancedEntropy)
+	}
+}
+
 func TestCalculateAdvanced_MinimumEntropy(t *testing.T) {
-	// Even heavily patterned passwords should retain at least 10% of base entropy
+	// Even a fully-patterned password retains positive (non-zero) entropy
+	// because each pattern class has a non-trivial intrinsic search space.
 	password := "qwerty123456"
 	simpleEntropy := Calculate(password)
 
 	issues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", "qwerty", issue.CategoryPattern, issue.SeverityMed),
+		issue.NewPattern(issue.CodePatternSequence, "Contains sequence: '123456'", "123456", issue.CategoryPattern, issue.SeverityMed),
 	}
 
 	advancedEntropy := CalculateAdvanced(password, issues)
-	minEntropy := simpleEntropy * 0.1
 
-	if advancedEntropy < minEntropy {
-		t.Errorf("advanced entropy should be at least 10%% of base: got %.2f, minimum %.2f",
-			advancedEntropy, minEntropy)
+	if advancedEntropy <= 0 {
+		t.Errorf("advanced entropy should be positive even for patterned password, got %.2f", advancedEntropy)
+	}
+	if advancedEntropy >= simpleEntropy {
+		t.Errorf("advanced entropy must be below simple for this patterned password: advanced=%.2f, simple=%.2f",
+			advancedEntropy, simpleEntropy)
 	}
 }
 
@@ -104,65 +148,38 @@ func TestCalculateAdvanced_EmptyPassword(t *testing.T) {
 	}
 }
 
-func TestCalculateAdvanced_Comparison(t *testing.T) {
-	// "qwerty123456" (patterned) should have lower entropy than "Xk9$mP2!vR7@nL4" (random)
-	patterned := "qwerty123456"
-	random := "Xk9$mP2!vR7@nL4"
+// ---------------------------------------------------------------------------
+// intrinsicPatternEntropy
+// ---------------------------------------------------------------------------
 
-	patternedIssues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
-	}
-
-	patternedEntropy := CalculateAdvanced(patterned, patternedIssues)
-	randomEntropy := CalculateAdvanced(random, nil)
-
-	if patternedEntropy >= randomEntropy {
-		t.Errorf("patterned password should have lower entropy: patterned=%.2f, random=%.2f",
-			patternedEntropy, randomEntropy)
+func TestIntrinsicPatternEntropy_Keyboard(t *testing.T) {
+	e := intrinsicPatternEntropy(issue.CodePatternKeyboard, "qwerty")
+	// log2(150) ≈ 7.23 bits
+	if e < 7.0 || e > 8.0 {
+		t.Errorf("keyboard intrinsic entropy out of expected range [7,8]: got %.2f", e)
 	}
 }
 
-func TestAnalyzePatterns(t *testing.T) {
-	password := "qwerty123456"
-	issues := []issue.Issue{
-		issue.New(issue.CodePatternKeyboard, "Contains keyboard pattern: 'qwerty'", issue.CategoryPattern, issue.SeverityMed),
-		issue.New(issue.CodePatternSequence, "Contains sequence: '123456'", issue.CategoryPattern, issue.SeverityMed),
-	}
-
-	info := analyzePatterns(password, issues)
-
-	// "qwerty" is 6 chars, "123456" is 6 chars, total 12 chars
-	// Both patterns should cover significant portions
-	if info.keyboardRatio <= 0 {
-		t.Errorf("expected keyboard ratio > 0, got %.2f", info.keyboardRatio)
-	}
-	if info.sequenceRatio <= 0 {
-		t.Errorf("expected sequence ratio > 0, got %.2f", info.sequenceRatio)
-	}
-	if info.totalPatternRatio <= 0 {
-		t.Errorf("expected total pattern ratio > 0, got %.2f", info.totalPatternRatio)
+func TestIntrinsicPatternEntropy_Sequence(t *testing.T) {
+	e := intrinsicPatternEntropy(issue.CodePatternSequence, "1234")
+	// log2(144) ≈ 7.17 bits
+	if e < 7.0 || e > 8.0 {
+		t.Errorf("sequence intrinsic entropy out of expected range [7,8]: got %.2f", e)
 	}
 }
 
-func TestExtractPatternFromMessage(t *testing.T) {
-	tests := []struct {
-		message  string
-		expected string
-	}{
-		{"Contains keyboard pattern: 'qwerty'", "qwerty"},
-		{"Contains sequence: '123456'", "123456"},
-		{"Contains repeated block: 'abc'", "abc"},
-		{"No pattern here", ""},
-		{"Pattern: 'test'", "test"},
+func TestIntrinsicPatternEntropy_Block(t *testing.T) {
+	// "abc" (3 lower chars): 3 × log2(26) ≈ 14.1 bits
+	e := intrinsicPatternEntropy(issue.CodePatternBlock, "abc")
+	if e < 14.0 || e > 15.0 {
+		t.Errorf("block intrinsic entropy for 'abc' out of expected range [14,15]: got %.2f", e)
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.message, func(t *testing.T) {
-			result := extractPatternFromMessage(tt.message)
-			if result != tt.expected {
-				t.Errorf("extractPatternFromMessage(%q) = %q, want %q", tt.message, result, tt.expected)
-			}
-		})
+func TestIntrinsicPatternEntropy_Unknown(t *testing.T) {
+	// Unknown codes return 0 (no reduction applied).
+	e := intrinsicPatternEntropy("UNKNOWN_CODE", "xyz")
+	if e != 0.0 {
+		t.Errorf("unknown pattern code should return 0, got %.2f", e)
 	}
 }

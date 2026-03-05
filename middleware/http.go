@@ -83,7 +83,7 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		password, err := extractor.ExtractPassword(r)
 		if err != nil {
-			writeError(w, r, http.StatusBadRequest, "invalid request body", nil)
+			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 		if password == "" {
@@ -91,7 +91,7 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			writeWeakPasswordResponse(w, r, cfg, 0, nil, "password is required")
+			writeWeakPasswordResponse(w, 0, nil, "password is required")
 			return
 		}
 		pc := cfg.PasscheckConfig
@@ -100,14 +100,14 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 		}
 		result, err := passcheck.CheckWithConfig(password, pc)
 		if err != nil {
-			writeError(w, r, http.StatusInternalServerError, "configuration error", err)
+			writeError(w, http.StatusInternalServerError, "configuration error")
 			return
 		}
 		if result.Score < cfg.MinScore {
 			if cfg.OnFailure != nil {
 				_ = cfg.OnFailure(result.Issues)
 			}
-			writeWeakPasswordResponse(w, r, cfg, result.Score, result.Issues, "password does not meet strength requirements")
+			writeWeakPasswordResponse(w, result.Score, result.Issues, "password does not meet strength requirements")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -115,15 +115,15 @@ func HTTP(cfg Config, next http.Handler) http.Handler {
 }
 
 // writeWeakPasswordResponse sends a 400 JSON response with score and issues.
-func writeWeakPasswordResponse(w http.ResponseWriter, _ *http.Request, _ Config, score int, issues []passcheck.Issue, message string) {
+func writeWeakPasswordResponse(w http.ResponseWriter, score int, issues []passcheck.Issue, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	body := weakPasswordBody{Error: message, Score: score, Issues: issues}
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// writeError sends a JSON error response and logs the cause if non-nil.
-func writeError(w http.ResponseWriter, _ *http.Request, status int, message string, _ error) {
+// writeError sends a JSON error response with the given status and message.
+func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})

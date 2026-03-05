@@ -157,16 +157,34 @@ func CalculateWithPassphrase(entropyBits float64, password string, issues IssueS
 	return clamp(score, 0, 100)
 }
 
-// Verdict maps a score (0-100) to a human-readable strength label.
+// Verdict maps a score (0-100) to a human-readable strength label using
+// the built-in default thresholds.
 func Verdict(score int) string {
+	return VerdictWith(score, ThresholdVeryWeak, ThresholdWeak, ThresholdOkay, ThresholdStrong)
+}
+
+// VerdictWith maps a score to a verdict label using caller-supplied thresholds.
+//
+// The four threshold parameters define the inclusive upper bounds for each
+// verdict tier:
+//
+//	score ≤ veryWeakMax → "Very Weak"
+//	score ≤ weakMax     → "Weak"
+//	score ≤ okayMax     → "Okay"
+//	score ≤ strongMax   → "Strong"
+//	score > strongMax   → "Very Strong"
+//
+// Callers are responsible for ensuring veryWeakMax < weakMax < okayMax < strongMax.
+// When the built-in defaults are desired, use [Verdict] instead.
+func VerdictWith(score, veryWeakMax, weakMax, okayMax, strongMax int) string {
 	switch {
-	case score <= ThresholdVeryWeak:
+	case score <= veryWeakMax:
 		return "Very Weak"
-	case score <= ThresholdWeak:
+	case score <= weakMax:
 		return "Weak"
-	case score <= ThresholdOkay:
+	case score <= okayMax:
 		return "Okay"
-	case score <= ThresholdStrong:
+	case score <= strongMax:
 		return "Strong"
 	default:
 		return "Very Strong"

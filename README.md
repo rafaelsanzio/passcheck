@@ -4,13 +4,19 @@
 [![codecov](https://codecov.io/gh/rafaelsanzio/passcheck/branch/main/graph/badge.svg)](https://codecov.io/gh/rafaelsanzio/passcheck)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rafaelsanzio/passcheck)](https://goreportcard.com/report/github.com/rafaelsanzio/passcheck)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/rafaelsanzio/passcheck)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![middleware/gin](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/gin.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/gin)
+[![middleware/echo](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/echo.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/echo)
+[![middleware/fiber](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/fiber.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/fiber)
 
 A comprehensive, zero-dependency Go library for password strength checking.
 
 Passcheck evaluates passwords against multiple criteria — basic rules, pattern
 detection, dictionary checks, and entropy calculation — returning an actionable
 result with a score, verdict, and specific feedback.
+
+**[Quick Start Guide](docs/quickstart.md)** — get up and running in 5 minutes · **[pkg.go.dev reference](https://pkg.go.dev/github.com/rafaelsanzio/passcheck)**
 
 ## Features
 
@@ -22,7 +28,7 @@ result with a score, verdict, and specific feedback.
 - **Policy Presets** — NIST, PCI-DSS, OWASP, Enterprise, UserFriendly in one call
 - **Custom Blocklists** — Add organization-specific passwords and words via config
 - **Breach Database (HIBP)** — Optional [Have I Been Pwned](https://haveibeenpwned.com/) integration via k-anonymity (only 5-char hash prefix sent)
-- **HTTP Middleware** — Drop-in middleware for net/http (Chi, Echo, Gin, Fiber with optional build tags)
+- **HTTP Middleware** — Drop-in middleware for net/http; framework adapters (Gin, Echo, Fiber) as independent submodules
 - **Entropy Calculation** — Multiple modes: Simple (character-set diversity), Advanced (pattern-aware reduction), Pattern-Aware (includes Markov-chain analysis)
 - **Passphrase Support** — Detects multi-word passphrases and uses word-based entropy (diceware model)
 - **Configurable Scoring Weights** — Customize penalty multipliers and entropy weight to match organizational security priorities
@@ -201,6 +207,7 @@ type IncrementalDelta struct {
 type Result struct {
     Score       int      // 0 (weakest) to 100 (strongest)
     Verdict     string   // "Very Weak", "Weak", "Okay", "Strong", "Very Strong"
+    MeetsPolicy bool     // true when all configured minimum requirements (length, charset, repeats) are satisfied
     Issues      []Issue  // Prioritized, deduplicated problems (Code, Message, Category, Severity)
     Suggestions []string // Positive feedback about strengths
     Entropy     float64  // Estimated entropy in bits
@@ -476,7 +483,31 @@ mux.Handle("/register", middleware.HTTP(middleware.Config{
 }, registerHandler))
 ```
 
-The middleware extracts the password from JSON or form body, runs passcheck, and returns 400 with score and issues when the password is too weak. Optional adapters for Chi, Echo, Gin, and Fiber (build tags). See [examples/middleware](examples/middleware/) and the [middleware package](middleware/) docs.
+The middleware extracts the password from JSON or form body, runs passcheck, and returns 400 with score and issues when the password is too weak.
+
+Framework-specific adapters live in independent submodules — add only what you need:
+
+```bash
+go get github.com/rafaelsanzio/passcheck/middleware/gin
+go get github.com/rafaelsanzio/passcheck/middleware/echo
+go get github.com/rafaelsanzio/passcheck/middleware/fiber
+```
+
+```go
+// Gin
+import passcheckgin "github.com/rafaelsanzio/passcheck/middleware/gin"
+r.POST("/register", passcheckgin.Gin(middleware.Config{MinScore: 60}), handler)
+
+// Echo
+import passcheckecho "github.com/rafaelsanzio/passcheck/middleware/echo"
+e.POST("/register", handler, passcheckecho.Echo(middleware.Config{MinScore: 60}))
+
+// Fiber
+import passcheckfiber "github.com/rafaelsanzio/passcheck/middleware/fiber"
+app.Post("/register", passcheckfiber.Fiber(middleware.Config{MinScore: 60}), handler)
+```
+
+Chi uses the standard `middleware.HTTP` wrapper — no extra dependency needed. See [examples/middleware](examples/middleware/) and the [middleware package](middleware/) docs.
 
 ### Validation
 
@@ -512,17 +543,20 @@ passcheck/
 ├── config.go           # Config struct, DefaultConfig, Validate
 ├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
 ├── hibp/               # Optional HIBP breach API client (k-anonymity)
-├── middleware/         # HTTP middleware (net/http, Chi, Echo, Gin, Fiber)
+├── middleware/         # HTTP middleware (net/http, Chi); gin/echo/fiber as submodules
 ├── internal/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats
-│   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution
+│   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution, dates
 │   ├── dictionary/     # Dictionary checks: common passwords, common words
 │   ├── entropy/        # Entropy calculation (simple, advanced, pattern-aware modes)
 │   ├── passphrase/     # Passphrase detection and word-based entropy
 │   ├── scoring/        # Weighted scoring algorithm with configurable penalty weights
 │   ├── feedback/       # Issue dedup, priority sort, positive feedback
+│   ├── context/        # Context-aware detection (username, email, custom terms)
+│   ├── hibpcheck/      # HIBP breach result integration
+│   ├── issue/          # Shared issue type definitions and constants
 │   ├── leet/           # Shared leetspeak normalisation utilities
-│   └── safemem/        # Secure memory zeroing
+│   └── safemem/        # Secure memory zeroing and constant-time comparisons
 ├── cmd/passcheck/      # CLI tool
 ├── examples/           # Usage examples
 └── Makefile            # Build, test, cross-compile
@@ -539,7 +573,7 @@ and bonuses (length + character-set diversity) into a 0-100 score.
 
 ## Performance
 
-Benchmarks run on Apple Silicon (M-series), Go 1.21+. Results vary by
+Benchmarks run on Apple Silicon (M-series), Go 1.24+. Results vary by
 hardware but relative magnitudes are representative.
 
 | Input                  | Time    | Allocs | Bytes  |
@@ -574,12 +608,15 @@ go test ./... -bench=. -benchmem -count=3 -run='^$' -timeout=120s
 ## Development
 
 ```bash
-make test       # run all tests
+make test       # run tests (core module)
+make test-all   # run tests for core and middleware submodules (gin, echo, fiber)
 make cover      # coverage report
 make bench      # run benchmarks
 make lint       # go vet
 make lint-ci    # golangci-lint (comprehensive)
 make build      # build CLI
+make wasm       # build WASM binary and copy to wasm/web/public/
+make serve-wasm # build WASM and start Vite dev server (requires Node.js)
 make cross      # cross-compile for all platforms
 make clean      # remove build artifacts
 make help       # show all targets
@@ -591,13 +628,14 @@ Every push and pull request triggers a GitHub Actions pipeline that:
 
 - Runs `go vet` and [`golangci-lint`](https://golangci-lint.run/) with a
   curated linter set (see [`.golangci.yml`](.golangci.yml))
-- Runs `go test -race` on a Go version matrix (1.21, 1.22, latest) across
-  Linux, macOS, and Windows
+- Checks `go mod tidy` for dependency drift
+- Runs `go test -race` on a Go version matrix (1.24, stable) on Linux, with
+  additional jobs on macOS and Windows using stable
+- Runs [`govulncheck`](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck) for known vulnerabilities
 - Uploads coverage to [Codecov](https://codecov.io/gh/rafaelsanzio/passcheck)
-- Builds the CLI and all examples
+- Builds the core module, CLI, middleware submodules (gin, echo, fiber), and all examples
 
-A separate nightly workflow runs fuzz tests (`FuzzCheck`, `FuzzCheckBytes`)
-for 60 seconds each and uploads crash artifacts on failure.
+A separate [WASM workflow](.github/workflows/wasm.yml) builds the WebAssembly binary and reports bundle sizes on push/PR. A nightly [Fuzz workflow](.github/workflows/fuzz.yml) runs fuzz targets (`FuzzCheckWithConfig`, `FuzzRedactMessage`) and uploads crash artifacts on failure.
 
 ### Test Coverage
 

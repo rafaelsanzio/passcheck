@@ -8,6 +8,15 @@ import (
 // ErrInvalidConfig is returned when the configuration fails validation.
 var ErrInvalidConfig = errors.New("passcheck: invalid configuration")
 
+// MaxCustomWordsSize is the maximum number of entries allowed in
+// Config.CustomWords. Larger lists cause O(N×len(password)) dictionary
+// scans that can spike CPU in multi-tenant APIs.
+const MaxCustomWordsSize = 100_000
+
+// MaxCustomPasswordsSize is the maximum number of entries allowed in
+// Config.CustomPasswords. See MaxCustomWordsSize for the rationale.
+const MaxCustomPasswordsSize = 100_000
+
 
 // HIBPCheckResult is a pre-computed result from an HIBP (Have I Been Pwned) lookup.
 // When Config.HIBPResult is set, the library uses it instead of calling HIBPChecker.
@@ -56,12 +65,16 @@ type Config struct {
 	// CustomPasswords is an optional list of additional passwords to check
 	// against during dictionary checks. Entries are matched case-insensitively.
 	// Nil or empty means use only the built-in common password list.
+	// Must not exceed MaxCustomPasswordsSize entries; Validate() returns an
+	// error for larger lists to prevent algorithmic DoS on long passwords.
 	CustomPasswords []string
 
 	// CustomWords is an optional list of additional words to detect as
 	// substrings during dictionary checks. Entries are matched
 	// case-insensitively. Words shorter than 4 characters are ignored.
 	// Nil or empty means use only the built-in common word list.
+	// Must not exceed MaxCustomWordsSize entries; Validate() returns an
+	// error for larger lists to prevent algorithmic DoS on long passwords.
 	CustomWords []string
 
 	// ContextWords is an optional list of user-specific terms to detect
@@ -104,6 +117,13 @@ type Config struct {
 	// substring checks in dictionary lookups so that response time does not
 	// leak whether the password matched a blocklist entry or where it matched.
 	// Default: false (faster, non-constant-time lookups).
+	//
+	// WARNING: ConstantTimeMode reduces timing leakage from branch-dependent
+	// early exits, but does NOT guarantee wall-clock constant time on real
+	// hardware. CPU caches and the memory prefetcher introduce measurable
+	// timing variation for inputs that differ in length or content. For the
+	// strongest protection, pair ConstantTimeMode with a non-zero
+	// MinExecutionTimeMs so all responses complete in a uniform minimum time.
 	ConstantTimeMode bool
 
 	// PassphraseMode, when true, enables passphrase-friendly scoring. When a
@@ -131,10 +151,10 @@ type Config struct {
 	MinExecutionTimeMs int
 
 	// EntropyMode controls how entropy is calculated. Simple mode uses the
-	// basic character-pool × length formula. Advanced mode reduces entropy
-	// for detected patterns (keyboard walks, sequences). PatternAware mode
-	// includes Markov-chain analysis for character transition probabilities.
-	// Default: EntropyModeSimple (backward-compatible).
+	// basic character-pool × length formula. Advanced mode (default) uses a
+	// segment-based model that assigns intrinsic entropy to each detected
+	// pattern rather than the inflated pool-size estimate. PatternAware mode
+	// layers Markov-chain analysis on top of Advanced.
 	EntropyMode EntropyMode
 
 	// PenaltyWeights allows customization of penalty multipliers and entropy
@@ -143,6 +163,12 @@ type Config struct {
 	// For example, setting DictionaryMatch to 2.0 doubles dictionary penalties,
 	// while setting EntropyWeight to 0.5 reduces the influence of entropy on the score.
 	PenaltyWeights *PenaltyWeights
+
+	// VerdictThresholds overrides the score boundaries used to map a numeric
+	// score to a human-readable verdict label. When nil the built-in defaults
+	// (Very Weak ≤ 20, Weak ≤ 40, Okay ≤ 60, Strong ≤ 80, Very Strong > 80)
+	// are used. See [VerdictThresholds] for field details.
+	VerdictThresholds *VerdictThresholds
 
 	// RedactSensitive, when true, masks potential password substrings in
 	// issue messages (e.g., "Contains common word: '***'"). This prevents
@@ -195,7 +221,8 @@ type EntropyMode string
 
 const (
 	// EntropyModeSimple uses the basic character-pool × length formula.
-	// This is the default and backward-compatible mode.
+	// This mode dramatically overestimates strength for patterned passwords
+	// (e.g. "Password123!" scores ~55 bits). Prefer EntropyModeAdvanced.
 	EntropyModeSimple EntropyMode = "simple"
 
 	// EntropyModeAdvanced reduces entropy for detected patterns (keyboard
@@ -211,11 +238,7 @@ const (
 
 // DefaultConfig returns the recommended configuration with sensible
 // defaults for general-purpose password validation.
-//
-// Note: Presets set only a subset of fields; other fields retain zero
-// values and are interpreted as defaults (see Validate).
 func DefaultConfig() Config {
-
 	return Config{
 		MinLength:        12,
 		RequireUpper:     true,
@@ -225,10 +248,9 @@ func DefaultConfig() Config {
 		MaxRepeats:       3,
 		PatternMinLength: 4,
 		MaxIssues:        5,
-		PassphraseMode:   false,
 		MinWords:         4,
 		WordDictSize:     7776,
-		EntropyMode:      EntropyModeSimple,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }
 
@@ -248,6 +270,8 @@ func (c Config) Validate() error {
 		{c.PatternMinLength >= 3, fmt.Sprintf("PatternMinLength must be >= 3, got %d", c.PatternMinLength)},
 		{c.MaxIssues >= 0, fmt.Sprintf("MaxIssues must be >= 0, got %d", c.MaxIssues)},
 		{c.MinExecutionTimeMs >= 0, fmt.Sprintf("MinExecutionTimeMs must be >= 0, got %d", c.MinExecutionTimeMs)},
+		{len(c.CustomPasswords) <= MaxCustomPasswordsSize, fmt.Sprintf("CustomPasswords must have at most %d entries, got %d", MaxCustomPasswordsSize, len(c.CustomPasswords))},
+		{len(c.CustomWords) <= MaxCustomWordsSize, fmt.Sprintf("CustomWords must have at most %d entries, got %d", MaxCustomWordsSize, len(c.CustomWords))},
 	}
 
 	if c.PassphraseMode {
@@ -265,6 +289,11 @@ func (c Config) Validate() error {
 
 	if c.PenaltyWeights != nil {
 		if err := c.PenaltyWeights.Validate(); err != nil {
+			return err
+		}
+	}
+	if c.VerdictThresholds != nil {
+		if err := c.VerdictThresholds.Validate(); err != nil {
 			return err
 		}
 	}
@@ -296,3 +325,63 @@ func (w *PenaltyWeights) Validate() error {
 	return nil
 }
 
+// VerdictThresholds defines the score boundaries that map a numeric score
+// (0–100) to a human-readable verdict label. All four fields must be set
+// as a strictly increasing sequence with VeryWeakMax ≥ 1 and StrongMax ≤ 99.
+//
+// Zero-value (nil pointer) means use the built-in defaults:
+//
+//	VeryWeakMax = 20  (scores 0–20  → "Very Weak")
+//	WeakMax     = 40  (scores 21–40 → "Weak")
+//	OkayMax     = 60  (scores 41–60 → "Okay")
+//	StrongMax   = 80  (scores 61–80 → "Strong")
+//	             > 80 → "Very Strong"
+//
+// Example — stricter thresholds that push users toward stronger passwords:
+//
+//	cfg.VerdictThresholds = &passcheck.VerdictThresholds{
+//	    VeryWeakMax: 30,
+//	    WeakMax:     50,
+//	    OkayMax:     70,
+//	    StrongMax:   85,
+//	}
+type VerdictThresholds struct {
+	// VeryWeakMax is the highest score that produces the "Very Weak" verdict.
+	// Default: 20.
+	VeryWeakMax int
+
+	// WeakMax is the highest score that produces the "Weak" verdict.
+	// Must be > VeryWeakMax. Default: 40.
+	WeakMax int
+
+	// OkayMax is the highest score that produces the "Okay" verdict.
+	// Must be > WeakMax. Default: 60.
+	OkayMax int
+
+	// StrongMax is the highest score that produces the "Strong" verdict.
+	// Scores above StrongMax produce "Very Strong".
+	// Must be > OkayMax and < 100. Default: 80.
+	StrongMax int
+}
+
+// Validate checks that the threshold values form a valid strictly increasing
+// sequence within [1, 99].
+func (t *VerdictThresholds) Validate() error {
+	type check struct {
+		ok  bool
+		msg string
+	}
+	checks := []check{
+		{t.VeryWeakMax >= 1, fmt.Sprintf("VerdictThresholds.VeryWeakMax must be >= 1, got %d", t.VeryWeakMax)},
+		{t.WeakMax > t.VeryWeakMax, fmt.Sprintf("VerdictThresholds.WeakMax (%d) must be > VeryWeakMax (%d)", t.WeakMax, t.VeryWeakMax)},
+		{t.OkayMax > t.WeakMax, fmt.Sprintf("VerdictThresholds.OkayMax (%d) must be > WeakMax (%d)", t.OkayMax, t.WeakMax)},
+		{t.StrongMax > t.OkayMax, fmt.Sprintf("VerdictThresholds.StrongMax (%d) must be > OkayMax (%d)", t.StrongMax, t.OkayMax)},
+		{t.StrongMax < 100, fmt.Sprintf("VerdictThresholds.StrongMax must be < 100, got %d", t.StrongMax)},
+	}
+	for _, k := range checks {
+		if !k.ok {
+			return fmt.Errorf("%w: %s", ErrInvalidConfig, k.msg)
+		}
+	}
+	return nil
+}

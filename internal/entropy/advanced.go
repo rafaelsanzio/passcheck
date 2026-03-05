@@ -1,163 +1,205 @@
 // Package entropy implements password entropy calculation.
 //
-// This file provides pattern-aware entropy calculation that reduces entropy
-// for detected patterns (keyboard walks, sequences, repeated blocks) to
-// provide more accurate strength estimates.
+// This file provides pattern-aware entropy calculation. Instead of applying a
+// post-hoc multiplicative reduction to the pool-size estimate, it uses a
+// segment-based model: each detected pattern segment contributes only its
+// intrinsic entropy — the bits needed to describe the pattern choice to an
+// attacker who already knows the pattern class — while uncovered characters
+// contribute the standard character-pool entropy.
 
 package entropy
 
 import (
+	"math"
 	"strings"
 
 	"github.com/rafaelsanzio/passcheck/internal/issue"
 )
 
-// CalculateAdvanced calculates entropy with pattern-aware adjustments.
-// It starts with the simple entropy calculation and then reduces it based
-// on detected patterns (keyboard walks, sequences, repeated blocks).
+// Keyboard walk and sequence search-space sizes, derived from the number of
+// distinct choices an attacker must make to reproduce the pattern:
+//
+//   - keyboardWalkSpace: ~35 QWERTY/numpad starting positions × 4 walk
+//     directions ≈ 140, rounded to 150 to include numpad diagonals.
+//     All walks of length ≥ 4 fall within this space, so the constant is
+//     independent of walk length.
+//
+//   - sequenceSpace: 36 possible starting characters (26 alpha + 10 digit)
+//     × 2 directions (ascending / descending) × 2 step sizes (±1, ±2) = 144.
+const (
+	keyboardWalkSpace = 150.0
+	sequenceSpace     = 144.0
+)
+
+// CalculateAdvanced calculates entropy using a segment-based model.
+//
+// The password is partitioned into two kinds of regions:
+//
+//  1. Pattern segments (identified by the Pattern field of each issue.Issue):
+//     contribute only the intrinsic entropy of their pattern class
+//     (see intrinsicPatternEntropy).
+//
+//  2. Free characters (not covered by any detected pattern): contribute the
+//     standard character-pool entropy (bits = count × log2(poolSize)).
+//
+// Repeated-block patterns are counted once regardless of how many times the
+// block repeats in the password; all repetitions are marked as covered but add
+// no additional entropy.
+//
+// Issues whose Pattern field is empty are silently ignored (e.g. issues from
+// rule or dictionary checkers that are unrelated to structural patterns).
 func CalculateAdvanced(password string, patternIssues []issue.Issue) float64 {
-	// Start with simple entropy calculation
-	baseEntropy := Calculate(password)
-	if baseEntropy == 0 {
+	runes := []rune(password)
+	n := len(runes)
+	if n == 0 {
 		return 0
 	}
 
-	// Extract pattern information from issues
-	patternInfo := analyzePatterns(password, patternIssues)
-
-	// Calculate reduction factor based on patterns
-	reductionFactor := calculatePatternReduction(patternInfo)
-
-	// Apply reduction: entropy = base × (1 - reduction)
-	adjustedEntropy := baseEntropy * (1.0 - reductionFactor)
-
-	// Ensure entropy doesn't go below a minimum threshold
-	// (at least 10% of base entropy to avoid zero/negative)
-	minEntropy := baseEntropy * 0.1
-	if adjustedEntropy < minEntropy {
-		adjustedEntropy = minEntropy
+	info, _ := AnalyzeCharsets(password)
+	pool := info.PoolSize()
+	if pool == 0 {
+		return 0
 	}
 
-	return adjustedEntropy
-}
+	// covered[i] = true when rune i is accounted for by a detected pattern.
+	covered := make([]bool, n)
 
-// patternInfo holds information about detected patterns in a password.
-type patternInfo struct {
-	keyboardRatio    float64 // ratio of password covered by keyboard patterns
-	sequenceRatio    float64 // ratio of password covered by sequences
-	repeatedRatio    float64 // ratio of password covered by repeated blocks
-	totalPatternRatio float64 // total ratio covered by any pattern
-}
+	lowerRunes := []rune(strings.ToLower(password))
+	patternEntropy := 0.0
 
-// analyzePatterns extracts pattern information from detected issues.
-func analyzePatterns(password string, issues []issue.Issue) patternInfo {
-	runes := []rune(password)
-	if len(runes) == 0 {
-		return patternInfo{}
-	}
-
-	// Track which positions are covered by patterns
-	covered := make([]bool, len(runes))
-
-	var keyboardCount, sequenceCount, repeatedCount int
-
-	for _, iss := range issues {
-		// Extract pattern from issue message
-		pattern := extractPatternFromMessage(iss.Message)
-		if pattern == "" {
+	for _, iss := range patternIssues {
+		pat := iss.Pattern
+		if pat == "" {
+			// No structured pattern attached; skip to avoid silently parsing
+			// the human-readable Message (which would break on any text change).
 			continue
 		}
 
-		// Find all occurrences of this pattern in the password (case-insensitive)
-		lowerPassword := strings.ToLower(password)
-		lowerPattern := strings.ToLower(pattern)
-		start := 0
+		patRunes := []rune(strings.ToLower(pat))
+		patLen := len(patRunes)
+		if patLen == 0 {
+			continue
+		}
 
-		for {
-			idx := strings.Index(lowerPassword[start:], lowerPattern)
-			if idx == -1 {
-				break
+		// Locate every occurrence of this pattern in the (lower-cased) password.
+		// For keyboard/sequence issues, each independent occurrence contributes
+		// its own intrinsic entropy (each is a new attacker guess).
+		// For block issues, only the FIRST occurrence that covers previously
+		// uncovered territory contributes entropy. This handles a subtlety: the
+		// block detector reports every unique repeating sub-sequence, so a
+		// password like "abcabcabc" generates overlapping block issues
+		// ("abc", "bca", "cab"). Without the newlyCovered guard those issues
+		// would together reconstruct the full simple entropy.
+		firstSeen := true
+		for start := 0; start+patLen <= n; {
+			if !runesMatch(lowerRunes, start, patRunes) {
+				start++
+				continue
 			}
-			actualIdx := start + idx
-			end := actualIdx + len([]rune(pattern))
 
-			// Mark positions as covered
-			for i := actualIdx; i < end && i < len(runes); i++ {
+			// Count how many of these positions are genuinely new before marking.
+			newlyCovered := 0
+			for i := start; i < start+patLen; i++ {
+				if !covered[i] {
+					newlyCovered++
+				}
+			}
+			for i := start; i < start+patLen; i++ {
 				covered[i] = true
 			}
 
-			// Count by pattern type
 			switch iss.Code {
-			case issue.CodePatternKeyboard:
-				keyboardCount += len([]rune(pattern))
-			case issue.CodePatternSequence:
-				sequenceCount += len([]rune(pattern))
 			case issue.CodePatternBlock:
-				repeatedCount += len([]rune(pattern))
+				// Only the first occurrence that adds new coverage carries entropy.
+				// Subsequent repetitions (and overlapping block variants) add zero.
+				if firstSeen && newlyCovered > 0 {
+					patternEntropy += intrinsicPatternEntropy(iss.Code, pat)
+				}
+			default:
+				// Keyboard/sequence: each non-trivially placed occurrence is an
+				// independent attacker guess.
+				patternEntropy += intrinsicPatternEntropy(iss.Code, pat)
 			}
 
-			start = actualIdx + 1
+			firstSeen = false
+			start += patLen // skip to the next non-overlapping position
 		}
 	}
 
-	// Calculate ratios
-	totalLen := float64(len(runes))
-	keyboardRatio := float64(keyboardCount) / totalLen
-	sequenceRatio := float64(sequenceCount) / totalLen
-	repeatedRatio := float64(repeatedCount) / totalLen
-
-	// Count total covered positions
-	totalCovered := 0
+	// Count characters not covered by any pattern.
+	freeCount := 0
 	for _, c := range covered {
-		if c {
-			totalCovered++
+		if !c {
+			freeCount++
 		}
 	}
-	totalPatternRatio := float64(totalCovered) / totalLen
 
-	return patternInfo{
-		keyboardRatio:    keyboardRatio,
-		sequenceRatio:    sequenceRatio,
-		repeatedRatio:    repeatedRatio,
-		totalPatternRatio: totalPatternRatio,
+	freeEntropy := float64(freeCount) * math.Log2(float64(pool))
+	total := freeEntropy + patternEntropy
+	if total < 0 {
+		return 0
+	}
+	return total
+}
+
+// intrinsicPatternEntropy returns the entropy in bits that a single occurrence
+// of the detected pattern contributes.
+//
+// Values are grounded in the attacker's search-space size for each class:
+//
+//   - Keyboard walk: an attacker enumerates (start key, direction) pairs.
+//     With ~35 keys and ~4 directions the space is ≈ 150 → log2(150) ≈ 7.2 bits,
+//     independent of walk length (longer walks do not increase the walk count).
+//
+//   - Sequence: attacker chooses (start character, direction, step).
+//     36 starting chars × 2 directions × 2 step sizes = 144 → log2(144) ≈ 7.2 bits.
+//
+//   - Repeated block: the attacker knows the block repeats; they only need to
+//     guess the block itself. Entropy = len(block) × log2(blockPool).
+func intrinsicPatternEntropy(code, pattern string) float64 {
+	switch code {
+	case issue.CodePatternKeyboard:
+		return math.Log2(keyboardWalkSpace)
+
+	case issue.CodePatternSequence:
+		return math.Log2(sequenceSpace)
+
+	case issue.CodePatternBlock:
+		// Only one copy of the block is secret; the repetitions are free.
+		blockInfo, blockLen := AnalyzeCharsets(pattern)
+		blockPool := blockInfo.PoolSize()
+		if blockPool < 2 || blockLen == 0 {
+			return 1.0
+		}
+		return float64(blockLen) * math.Log2(float64(blockPool))
+
+	case issue.CodePatternDate:
+		// A date like "2024" or "12/31/2024" is drawn from a digit pool.
+		// Entropy = len(pattern digits) × log2(10), giving ≈ 3.3 bits per digit.
+		digitCount := 0
+		for _, r := range pattern {
+			if r >= '0' && r <= '9' {
+				digitCount++
+			}
+		}
+		if digitCount == 0 {
+			return 1.0
+		}
+		return float64(digitCount) * math.Log2(10)
+
+	default:
+		// Covered characters contribute no intrinsic entropy (maximally conservative).
+		return 0.0
 	}
 }
 
-// extractPatternFromMessage extracts the pattern string from an issue message.
-// Messages are formatted like: "Contains keyboard pattern: 'qwerty'"
-func extractPatternFromMessage(message string) string {
-	// Look for pattern in quotes
-	start := strings.Index(message, "'")
-	if start == -1 {
-		return ""
+// runesMatch reports whether lowerRunes[start : start+len(pat)] equals pat.
+// All inputs must already be lower-cased.
+func runesMatch(lowerRunes []rune, start int, pat []rune) bool {
+	for i, r := range pat {
+		if lowerRunes[start+i] != r {
+			return false
+		}
 	}
-	end := strings.LastIndex(message, "'")
-	if end <= start {
-		return ""
-	}
-	return message[start+1 : end]
-}
-
-// calculatePatternReduction calculates the entropy reduction factor based on patterns.
-// Returns a value between 0.0 (no reduction) and 0.9 (maximum reduction).
-func calculatePatternReduction(info patternInfo) float64 {
-	// Base reduction from total pattern coverage
-	// More patterns = more reduction, but with diminishing returns
-	baseReduction := info.totalPatternRatio * 0.6 // Up to 60% reduction
-
-	// Additional reduction for specific pattern types
-	// Keyboard patterns are more predictable than sequences
-	keyboardPenalty := info.keyboardRatio * 0.15 // Up to 15% additional
-	sequencePenalty := info.sequenceRatio * 0.10  // Up to 10% additional
-	repeatedPenalty := info.repeatedRatio * 0.20  // Up to 20% additional (very predictable)
-
-	// Combine reductions (with diminishing returns)
-	totalReduction := baseReduction + keyboardPenalty + sequencePenalty + repeatedPenalty
-
-	// Cap maximum reduction at 90% (always keep at least 10% of entropy)
-	if totalReduction > 0.9 {
-		totalReduction = 0.9
-	}
-
-	return totalReduction
+	return true
 }

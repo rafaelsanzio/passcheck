@@ -1,6 +1,4 @@
-//go:build fiber
-
-package middleware
+package passcheckfiber
 
 import (
 	"bytes"
@@ -9,11 +7,18 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rafaelsanzio/passcheck/middleware"
 )
+
+// testResponseBody mirrors the JSON shape returned by the middleware on rejection.
+type testResponseBody struct {
+	Error string `json:"error"`
+	Score int    `json:"score"`
+}
 
 func TestFiber_WeakPassword_Returns400(t *testing.T) {
 	app := fiber.New()
-	app.Post("/register", Fiber(Config{MinScore: 60}), func(c *fiber.Ctx) error {
+	app.Post("/register", Fiber(middleware.Config{MinScore: 60}), func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
 
@@ -29,7 +34,7 @@ func TestFiber_WeakPassword_Returns400(t *testing.T) {
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
-	var res weakPasswordBody
+	var res testResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -41,7 +46,7 @@ func TestFiber_WeakPassword_Returns400(t *testing.T) {
 func TestFiber_StrongPassword_CallsNext(t *testing.T) {
 	app := fiber.New()
 	nextCalled := false
-	app.Post("/register", Fiber(Config{MinScore: 60}), func(c *fiber.Ctx) error {
+	app.Post("/register", Fiber(middleware.Config{MinScore: 60}), func(c *fiber.Ctx) error {
 		nextCalled = true
 		return c.SendString("registered")
 	})

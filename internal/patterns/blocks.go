@@ -56,9 +56,10 @@ func checkRepeatedBlocks(password string) []issue.Issue {
 			next := string(runes[start+blockLen : start+blockLen*2])
 			if block == next && !seen[block] {
 				seen[block] = true
-				issues = append(issues, issue.New(
+				issues = append(issues, issue.NewPattern(
 					issue.CodePatternBlock,
 					fmt.Sprintf("Contains repeated block: '%s'", block),
+					block,
 					issue.CategoryPattern,
 					issue.SeverityMed,
 				))
