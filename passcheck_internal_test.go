@@ -10,8 +10,8 @@ import (
 
 func TestConstantSynchronization(t *testing.T) {
 	tests := []struct {
-		name   string
-		public string
+		name     string
+		public   string
 		internal string
 	}{
 		{"CodeRuleTooShort", CodeRuleTooShort, issue.CodeRuleTooShort},
@@ -91,6 +91,51 @@ func TestToPublicIssues(t *testing.T) {
 		}
 		if !strings.Contains(public[0].Message, "***") {
 			t.Errorf("redacted message should contain '***', got: %q", public[0].Message)
+		}
+	})
+}
+
+func TestNewChecker_UsesValidatedConfig(t *testing.T) {
+	cfg := DefaultConfig()
+
+	checker, err := NewChecker(cfg)
+	if err != nil {
+		t.Fatalf("NewChecker(DefaultConfig) returned error: %v", err)
+	}
+
+	result, err := checker.Check("P@ssw0rd123!")
+	if err != nil {
+		t.Fatalf("checker.Check returned error: %v", err)
+	}
+	if result.Score < 0 || result.Score > 100 {
+		t.Errorf("checker result score out of range: %d", result.Score)
+	}
+}
+
+func TestResolveVerdict_DefaultAndCustomThresholds(t *testing.T) {
+	t.Run("default_thresholds", func(t *testing.T) {
+		for _, score := range []int{0, 25, 50, 75, 90} {
+			got := resolveVerdict(score, nil)
+			want := scoring.Verdict(score)
+			if got != want {
+				t.Errorf("resolveVerdict(%d, nil) = %q, want %q", score, got, want)
+			}
+		}
+	})
+
+	t.Run("custom_thresholds", func(t *testing.T) {
+		vt := &VerdictThresholds{
+			VeryWeakMax: 10,
+			WeakMax:     20,
+			OkayMax:     40,
+			StrongMax:   70,
+		}
+		for _, score := range []int{5, 15, 30, 60, 90} {
+			got := resolveVerdict(score, vt)
+			want := scoring.VerdictWith(score, vt.VeryWeakMax, vt.WeakMax, vt.OkayMax, vt.StrongMax)
+			if got != want {
+				t.Errorf("resolveVerdict(%d, custom) = %q, want %q", score, got, want)
+			}
 		}
 	})
 }

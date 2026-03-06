@@ -6,9 +6,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/rafaelsanzio/passcheck)](https://goreportcard.com/report/github.com/rafaelsanzio/passcheck)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rafaelsanzio/passcheck)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![middleware/gin](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/gin.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/gin)
-[![middleware/echo](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/echo.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/echo)
-[![middleware/fiber](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/fiber.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/fiber)
 
 A comprehensive, zero-dependency Go library for password strength checking.
 
@@ -253,32 +250,31 @@ if err != nil {
 
 ### Config Fields
 
-| Field                | Type               | Default | Description                                                                                                                           |
-| -------------------- | ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `MinLength`          | `int`              | 12      | Minimum runes required                                                                                                                |
-| `RequireUpper`       | `bool`             | true    | Require uppercase letter                                                                                                              |
-| `RequireLower`       | `bool`             | true    | Require lowercase letter                                                                                                              |
-| `RequireDigit`       | `bool`             | true    | Require numeric digit                                                                                                                 |
-| `RequireSymbol`      | `bool`             | true    | Require symbol character                                                                                                              |
-| `MaxRepeats`         | `int`              | 3       | Max consecutive identical characters                                                                                                  |
-| `PatternMinLength`   | `int`              | 4       | Min length for keyboard/sequence detection                                                                                            |
-| `MaxIssues`          | `int`              | 5       | Max issues returned (0 = no limit)                                                                                                    |
-| `CustomPasswords`    | `[]string`         | nil     | Additional passwords to block (case-insensitive)                                                                                      |
-| `CustomWords`        | `[]string`         | nil     | Additional words to detect as substrings                                                                                              |
-| `ContextWords`       | `[]string`         | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
-| `DisableLeet`        | `bool`             | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
-| `HIBPChecker`        | `HIBPChecker`      | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
-| `HIBPMinOccurrences` | `int`              | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
-| `HIBPResult`         | `*HIBPCheckResult` | nil     | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                     |
-| `PassphraseMode`     | `bool`             | false   | Enable passphrase-friendly scoring; detects multi-word passphrases and uses word-based entropy                                        |
-| `MinWords`           | `int`              | 4       | Minimum distinct words to consider a passphrase (only used when `PassphraseMode` is true)                                              |
-| `WordDictSize`       | `int`              | 7776    | Assumed dictionary size for word-based entropy (diceware standard; only used when `PassphraseMode` is true)                            |
-| `EntropyMode`        | `EntropyMode`      | "simple" | Entropy calculation mode: "simple" (default), "advanced" (pattern-aware), "pattern-aware" (includes Markov-chain analysis)          |
-| `PenaltyWeights`     | `*PenaltyWeights`  | nil     | Custom penalty multipliers and entropy weight; when nil, defaults to 1.0 for all weights                                                |
-| `ConstantTimeMode`   | `bool`             | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
-| `MinExecutionTimeMs` | `int`              | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
-| `RedactSensitive`    | `bool`             | false   | Mask password substrings in issue messages (e.g., `'***'`) to prevent logging sensitive data                                          |
-
+| Field                | Type               | Default  | Description                                                                                                                           |
+| -------------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinLength`          | `int`              | 12       | Minimum runes required                                                                                                                |
+| `RequireUpper`       | `bool`             | true     | Require uppercase letter                                                                                                              |
+| `RequireLower`       | `bool`             | true     | Require lowercase letter                                                                                                              |
+| `RequireDigit`       | `bool`             | true     | Require numeric digit                                                                                                                 |
+| `RequireSymbol`      | `bool`             | true     | Require symbol character                                                                                                              |
+| `MaxRepeats`         | `int`              | 3        | Max consecutive identical characters                                                                                                  |
+| `PatternMinLength`   | `int`              | 4        | Min length for keyboard/sequence detection                                                                                            |
+| `MaxIssues`          | `int`              | 5        | Max issues returned (0 = no limit)                                                                                                    |
+| `CustomPasswords`    | `[]string`         | nil      | Additional passwords to block (case-insensitive)                                                                                      |
+| `CustomWords`        | `[]string`         | nil      | Additional words to detect as substrings                                                                                              |
+| `ContextWords`       | `[]string`         | nil      | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
+| `DisableLeet`        | `bool`             | false    | Disable leetspeak normalization in dictionary checks                                                                                  |
+| `HIBPChecker`        | `HIBPChecker`      | nil      | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
+| `HIBPMinOccurrences` | `int`              | 1        | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
+| `HIBPResult`         | `*HIBPCheckResult` | nil      | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                     |
+| `PassphraseMode`     | `bool`             | false    | Enable passphrase-friendly scoring; detects multi-word passphrases and uses word-based entropy                                        |
+| `MinWords`           | `int`              | 4        | Minimum distinct words to consider a passphrase (only used when `PassphraseMode` is true)                                             |
+| `WordDictSize`       | `int`              | 7776     | Assumed dictionary size for word-based entropy (diceware standard; only used when `PassphraseMode` is true)                           |
+| `EntropyMode`        | `EntropyMode`      | "simple" | Entropy calculation mode: "simple" (default), "advanced" (pattern-aware), "pattern-aware" (includes Markov-chain analysis)            |
+| `PenaltyWeights`     | `*PenaltyWeights`  | nil      | Custom penalty multipliers and entropy weight; when nil, defaults to 1.0 for all weights                                              |
+| `ConstantTimeMode`   | `bool`             | false    | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
+| `MinExecutionTimeMs` | `int`              | 0        | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
+| `RedactSensitive`    | `bool`             | false    | Mask password substrings in issue messages (e.g., `'***'`) to prevent logging sensitive data                                          |
 
 ### Custom Blocklists
 
@@ -394,6 +390,7 @@ result, _ := passcheck.CheckWithConfig("correct-horse-battery-staple", cfg)
 ```
 
 **Key characteristics:**
+
 - Detects multi-word passphrases automatically
 - Uses word-based entropy (diceware model) instead of character-based entropy
 - Eliminates dictionary penalties for detected passphrases
@@ -424,6 +421,7 @@ result, _ := passcheck.CheckWithConfig(password, cfg)
 ```
 
 **When to use each mode:**
+
 - **Simple**: Fast, backward-compatible, suitable for most use cases
 - **Advanced**: Better accuracy for passwords with patterns (keyboard walks, sequences)
 - **Pattern-aware**: Maximum accuracy, includes Markov-chain character transition analysis
@@ -444,6 +442,7 @@ result, _ := passcheck.CheckWithConfig(password, cfg)
 ```
 
 **Use cases:**
+
 - **Strict enterprise**: Increase all penalty multipliers (2.0–3.0×)
 - **Passphrase-friendly**: Reduce pattern penalties, increase entropy weight
 - **Dictionary-focused**: Heavily penalize dictionary matches (3.0–5.0×)
@@ -533,7 +532,6 @@ for invalid configurations.
 2.  **Prefer CheckBytes**: When passwords are available as `[]byte` (e.g., from HTTP request bodies), use `CheckBytes` or `CheckBytesWithConfig` to ensure the buffer is zeroed immediately after analysis.
 3.  **Enable ConstantTimeMode**: For high-assurance or remote-attacker scenarios, enable `ConstantTimeMode` to mitigate timing side channels in dictionary lookups.
 4.  **Run Security Tooling**: Integrity checks like `govulncheck` and `gosec` are recommended. Use `make security` to run them locally.
-
 
 ## Architecture
 
