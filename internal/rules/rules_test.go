@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/issue"
 )
+
 
 // ---------------------------------------------------------------------------
 // Check (integration)
@@ -99,21 +101,22 @@ func TestAnalyzeCharsets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cs := analyzeCharsets(tt.password)
-			if cs.hasUpper != tt.wantUpper {
-				t.Errorf("hasUpper: got %v, want %v", cs.hasUpper, tt.wantUpper)
+			cs, _ := entropy.AnalyzeCharsets(tt.password)
+			if cs.HasUpper != tt.wantUpper {
+				t.Errorf("hasUpper: got %v, want %v", cs.HasUpper, tt.wantUpper)
 			}
-			if cs.hasLower != tt.wantLower {
-				t.Errorf("hasLower: got %v, want %v", cs.hasLower, tt.wantLower)
+			if cs.HasLower != tt.wantLower {
+				t.Errorf("hasLower: got %v, want %v", cs.HasLower, tt.wantLower)
 			}
-			if cs.hasDigit != tt.wantDigit {
-				t.Errorf("hasDigit: got %v, want %v", cs.hasDigit, tt.wantDigit)
+			if cs.HasDigit != tt.wantDigit {
+				t.Errorf("hasDigit: got %v, want %v", cs.HasDigit, tt.wantDigit)
 			}
-			if cs.hasSymbol != tt.wantSymbol {
-				t.Errorf("hasSymbol: got %v, want %v", cs.hasSymbol, tt.wantSymbol)
+			if cs.HasSymbol != tt.wantSymbol {
+				t.Errorf("hasSymbol: got %v, want %v", cs.HasSymbol, tt.wantSymbol)
 			}
 		})
 	}
+
 }
 
 func TestCheckCharsets(t *testing.T) {

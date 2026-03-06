@@ -59,6 +59,8 @@ import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/feedback"
 	"github.com/rafaelsanzio/passcheck/internal/hibpcheck"
+	"github.com/rafaelsanzio/passcheck/internal/issue"
+	"github.com/rafaelsanzio/passcheck/internal/passphrase"
 	"github.com/rafaelsanzio/passcheck/internal/patterns"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 	"github.com/rafaelsanzio/passcheck/internal/safemem"
@@ -82,25 +84,52 @@ const (
 // Issue codes — stable identifiers for programmatic handling.
 // Consumers can switch on Code to react differently (e.g. "RULE_TOO_SHORT" vs "DICT_COMMON_PASSWORD").
 const (
-	CodeRuleTooShort        = "RULE_TOO_SHORT"
-	CodeRuleNoUpper         = "RULE_NO_UPPER"
-	CodeRuleNoLower         = "RULE_NO_LOWER"
-	CodeRuleNoDigit         = "RULE_NO_DIGIT"
-	CodeRuleNoSymbol        = "RULE_NO_SYMBOL"
-	CodeRuleWhitespace      = "RULE_WHITESPACE"
-	CodeRuleControlChar     = "RULE_CONTROL_CHAR"
-	CodeRuleRepeatedChars   = "RULE_REPEATED_CHARS"
-	CodePatternKeyboard     = "PATTERN_KEYBOARD"
-	CodePatternSequence     = "PATTERN_SEQUENCE"
-	CodePatternBlock        = "PATTERN_BLOCK"
-	CodePatternSubstitution = "PATTERN_SUBSTITUTION"
-	CodeDictCommonPassword  = "DICT_COMMON_PASSWORD"
-	CodeDictLeetVariant     = "DICT_LEET_VARIANT"
-	CodeDictCommonWord      = "DICT_COMMON_WORD"
-	CodeDictCommonWordSub   = "DICT_COMMON_WORD_SUB"
-	CodeHIBPBreached        = "HIBP_BREACHED"
-	CodeContextWord         = "CONTEXT_WORD"
+	CodeRuleTooShort        = issue.CodeRuleTooShort
+	CodeRuleNoUpper         = issue.CodeRuleNoUpper
+	CodeRuleNoLower         = issue.CodeRuleNoLower
+	CodeRuleNoDigit         = issue.CodeRuleNoDigit
+	CodeRuleNoSymbol        = issue.CodeRuleNoSymbol
+	CodeRuleWhitespace      = issue.CodeRuleWhitespace
+	CodeRuleControlChar     = issue.CodeRuleControlChar
+	CodeRuleRepeatedChars   = issue.CodeRuleRepeatedChars
+	CodePatternKeyboard     = issue.CodePatternKeyboard
+	CodePatternSequence     = issue.CodePatternSequence
+	CodePatternBlock        = issue.CodePatternBlock
+	CodePatternSubstitution = issue.CodePatternSubstitution
+	CodePatternDate         = issue.CodePatternDate
+	CodeDictCommonPassword  = issue.CodeDictCommonPassword
+	CodeDictLeetVariant     = issue.CodeDictLeetVariant
+	CodeDictCommonWord      = issue.CodeDictCommonWord
+	CodeDictCommonWordSub   = issue.CodeDictCommonWordSub
+	CodeHIBPBreached        = issue.CodeHIBPBreached
+	CodeContextWord         = issue.CodeContextWord
 )
+
+// Checker performs password strength checks.
+type Checker interface {
+	Check(password string) (Result, error)
+}
+
+// Check implements the Checker interface for a given configuration.
+func (c Config) Check(password string) (Result, error) {
+	return CheckWithConfig(password, c)
+}
+
+// NewChecker returns a validated Checker built from cfg.
+//
+// It calls cfg.Validate() and returns ErrInvalidConfig if the configuration
+// is invalid. Use this factory when you want to validate the configuration
+// once at startup and reuse the Checker across multiple calls.
+//
+//	checker, err := passcheck.NewChecker(cfg)
+//	if err != nil { /* cfg is invalid */ }
+//	result, _ := checker.Check("mypassword")
+func NewChecker(cfg Config) (Checker, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
 
 // Issue represents a single finding from a password check.
 type Issue struct {
@@ -118,6 +147,17 @@ type Result struct {
 	// Verdict is a human-readable strength label.
 	// One of: "Very Weak", "Weak", "Okay", "Strong", "Very Strong".
 	Verdict string `json:"verdict"`
+
+	// MeetsPolicy is true when the password satisfies all configured minimum
+	// requirements (length, character-set rules, repeat limits). A password can
+	// meet policy and still have a low score if it relies on common patterns or
+	// dictionary words; conversely, failing policy means at least one hard
+	// requirement (e.g. MinLength, RequireUpper) was not satisfied.
+	//
+	// Use this field to distinguish "did not meet minimum requirements" from
+	// "meets requirements but is a weak choice" — a distinction the Score alone
+	// cannot express.
+	MeetsPolicy bool `json:"meets_policy"`
 
 	// Issues is a deduplicated, priority-sorted list of structured problems
 	// found with the password. Use [Result.IssueMessages] for a []string of
@@ -165,7 +205,7 @@ type IncrementalDelta struct {
 // configuration is always valid.
 func Check(password string) Result {
 	// DefaultConfig is guaranteed valid — error is always nil.
-	result, _ := CheckWithConfig(password, DefaultConfig())
+	result, _ := DefaultConfig().Check(password)
 	return result
 }
 
@@ -192,60 +232,24 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	// Enforce maximum length to bound algorithmic complexity.
 	pw := truncate(password)
 
-	// Map public config to internal options.
-	rulesOpts := rules.Options{
-		MinLength:     cfg.MinLength,
-		RequireUpper:  cfg.RequireUpper,
-		RequireLower:  cfg.RequireLower,
-		RequireDigit:  cfg.RequireDigit,
-		RequireSymbol: cfg.RequireSymbol,
-		MaxRepeats:    cfg.MaxRepeats,
-	}
-
-	patternsOpts := patterns.Options{
-		KeyboardMinLen: cfg.PatternMinLength,
-		SequenceMinLen: cfg.PatternMinLength,
-	}
-
-	dictOpts := dictionary.Options{
-		CustomPasswords: toLowerSlice(cfg.CustomPasswords),
-		CustomWords:     toLowerSlice(cfg.CustomWords),
-		DisableLeet:     cfg.DisableLeet,
-		ConstantTime:    cfg.ConstantTimeMode,
-	}
-
-	contextOpts := context.Options{
-		ContextWords: cfg.ContextWords,
-	}
-
-	hibpOpts := hibpcheck.Options{
-		Checker:        cfg.HIBPChecker,
-		MinOccurrences: cfg.HIBPMinOccurrences,
-	}
-	if cfg.HIBPResult != nil {
-		hibpOpts.Result = &hibpcheck.Result{
-			Breached: cfg.HIBPResult.Breached,
-			Count:    cfg.HIBPResult.Count,
-		}
-	}
-
 	// Collect issues by category for weighted scoring.
+	opts := configToInternal(cfg)
 	issueSet := scoring.IssueSet{
-		Rules:      rules.CheckWith(pw, rulesOpts),
-		Patterns:   patterns.CheckWith(pw, patternsOpts),
-		Dictionary: dictionary.CheckWith(pw, dictOpts),
-		Context:    context.CheckWith(pw, contextOpts),
-		HIBP:       hibpcheck.CheckWith(password, hibpOpts),
+		Rules:      rules.CheckWith(pw, opts.rules),
+		Patterns:   patterns.CheckWith(pw, opts.patterns),
+		Dictionary: dictionary.CheckWith(pw, opts.dictionary),
+		Context:    context.CheckWith(pw, opts.context),
+		HIBP:       hibpcheck.CheckWith(password, opts.hibp),
 	}
 
-	// Entropy calculation
-	e := entropy.Calculate(pw)
+	// Calculate entropy and detect passphrase (word-based entropy if applicable)
+	e, passphraseInfo := calculateEntropy(password, pw, cfg, issueSet.Patterns)
 
-	// Weighted scoring using the configured MinLength for bonus baseline.
-	score := scoring.CalculateWith(e, pw, issueSet, cfg.MinLength)
+	// Weighted scoring
+	score := scoring.CalculateWithPassphrase(e, pw, issueSet, cfg.MinLength, passphraseInfo, mapWeights(cfg.PenaltyWeights))
 
-	// Verdict
-	verdict := scoring.Verdict(score)
+	// Verdict — use custom thresholds when provided, otherwise built-in defaults.
+	verdict := resolveVerdict(score, cfg.VerdictThresholds)
 
 	// Feedback engine: dedup, prioritize, limit issues.
 	refined := feedback.Refine(issueSet, cfg.MaxIssues)
@@ -254,13 +258,15 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	suggestions := feedback.GeneratePositive(pw, issueSet, e)
 
 	// Convert internal issues to public Issue type.
-	issues := make([]Issue, len(refined))
-	for i, iss := range refined {
-		issues[i] = Issue{Code: iss.Code, Message: iss.Message, Category: iss.Category, Severity: iss.Severity}
-	}
+	issues := toPublicIssues(refined, cfg.RedactSensitive)
+
 	if suggestions == nil {
 		suggestions = []string{}
 	}
+
+	// MeetsPolicy: all configured hard requirements are satisfied when there
+	// are no RULE_* violations (length, charset, repeat limits).
+	meetsPolicy := len(issueSet.Rules) == 0
 
 	if cfg.ConstantTimeMode && cfg.MinExecutionTimeMs > 0 {
 		safemem.SleepRemaining(start, cfg.MinExecutionTimeMs)
@@ -268,6 +274,7 @@ func CheckWithConfig(password string, cfg Config) (Result, error) {
 	return Result{
 		Score:       score,
 		Verdict:     verdict,
+		MeetsPolicy: meetsPolicy,
 		Issues:      issues,
 		Suggestions: suggestions,
 		Entropy:     e,
@@ -300,14 +307,43 @@ func CheckBytesWithConfig(password []byte, cfg Config) (Result, error) {
 	return CheckWithConfig(s, cfg)
 }
 
+// calculateEntropy computes entropy for a password, using word-based entropy
+// for passphrases when PassphraseMode is enabled, otherwise character-based entropy
+// with the configured EntropyMode (simple, advanced, or pattern-aware).
+// Returns the entropy value and passphrase info (nil if not a passphrase).
+func calculateEntropy(password, pw string, cfg Config, patternIssues []issue.Issue) (float64, *passphrase.Info) {
+	// Passphrase detection uses the original input; entropy uses the truncated form.
+	// Handle passphrase mode first (word-based entropy)
+	if cfg.PassphraseMode {
+		info := passphrase.Detect(password, cfg.MinWords)
+		if info.IsPassphrase {
+			dictSize := cfg.WordDictSize
+			if dictSize < 2 {
+				dictSize = passphrase.DefaultWordDictSize
+			}
+			return passphrase.CalculateWordEntropy(info.WordCount, dictSize), &info
+		}
+		// Not a passphrase, fall through to character-based entropy
+	}
+
+	// Character-based entropy with mode selection
+	entropyMode := string(cfg.EntropyMode)
+	if entropyMode == "" {
+		// Zero-value Config (not via DefaultConfig) falls back to simple to
+		// avoid surprising callers who construct Config{} by hand.
+		entropyMode = string(EntropyModeSimple)
+	}
+	return entropy.CalculateWithMode(pw, entropyMode, patternIssues), nil
+}
+
 // CheckIncremental evaluates the strength of a password using the default
 // configuration and is intended for real-time feedback (e.g. strength meters).
 //
-// When previous is nil, the behavior is identical to [Check]. When previous
-// is non-nil, a full check is performed and the new result is returned; the
-// previous result is not used to skip work (callers can compare the returned
-// result with previous to detect changes). For delta information and custom
-// config, use [CheckIncrementalWithConfig].
+// A full check is always performed; previous is not used to skip work.
+// When previous is nil, the returned result is equivalent to calling [Check]
+// directly. Callers can compare the returned result with previous to detect
+// changes. For delta information and custom config, use
+// [CheckIncrementalWithConfig].
 //
 // When used on every keystroke, callers should debounce (e.g. 100–300 ms) to
 // limit CPU usage and keep the UI responsive.
@@ -394,4 +430,120 @@ func toLowerSlice(ss []string) []string {
 		out[i] = strings.ToLower(s)
 	}
 	return out
+}
+
+func mapHIBPResult(res *HIBPCheckResult) *hibpcheck.Result {
+	if res == nil {
+		return nil
+	}
+	return &hibpcheck.Result{
+		Breached: res.Breached,
+		Count:    res.Count,
+	}
+}
+
+func mapWeights(w *PenaltyWeights) *scoring.Weights {
+	if w == nil {
+		return nil
+	}
+	return &scoring.Weights{
+		RuleViolation:   w.RuleViolation,
+		PatternMatch:    w.PatternMatch,
+		DictionaryMatch: w.DictionaryMatch,
+		ContextMatch:    w.ContextMatch,
+		HIBPBreach:      w.HIBPBreach,
+		EntropyWeight:   w.EntropyWeight,
+	}
+}
+
+// internalOptions bundles options for internal package checks.
+type internalOptions struct {
+	rules      rules.Options
+	patterns   patterns.Options
+	dictionary dictionary.Options
+	context    context.Options
+	hibp       hibpcheck.Options
+}
+
+// configToInternal maps the public Config to internal package option structs.
+func configToInternal(cfg Config) internalOptions {
+	return internalOptions{
+		rules: rules.Options{
+			MinLength:     cfg.MinLength,
+			RequireUpper:  cfg.RequireUpper,
+			RequireLower:  cfg.RequireLower,
+			RequireDigit:  cfg.RequireDigit,
+			RequireSymbol: cfg.RequireSymbol,
+			MaxRepeats:    cfg.MaxRepeats,
+		},
+		patterns: patterns.Options{
+			KeyboardMinLen: cfg.PatternMinLength,
+			SequenceMinLen: cfg.PatternMinLength,
+		},
+		dictionary: dictionary.Options{
+			CustomPasswords: toLowerSlice(cfg.CustomPasswords),
+			CustomWords:     toLowerSlice(cfg.CustomWords),
+			DisableLeet:     cfg.DisableLeet,
+			ConstantTime:    cfg.ConstantTimeMode,
+		},
+		context: context.Options{
+			ContextWords: cfg.ContextWords,
+		},
+		hibp: hibpcheck.Options{
+			Checker:        cfg.HIBPChecker,
+			MinOccurrences: cfg.HIBPMinOccurrences,
+			Result:         mapHIBPResult(cfg.HIBPResult),
+		},
+	}
+}
+
+// resolveVerdict maps score to a verdict string, honoring custom thresholds
+// when provided and falling back to the built-in scoring defaults when t is nil.
+func resolveVerdict(score int, t *VerdictThresholds) string {
+	if t == nil {
+		return scoring.Verdict(score)
+	}
+	return scoring.VerdictWith(score, t.VeryWeakMax, t.WeakMax, t.OkayMax, t.StrongMax)
+}
+
+// toPublicIssues converts internal issues to the public Issue type.
+// If redact is true, it masks potential password substrings in messages.
+func toPublicIssues(refined []issue.Issue, redact bool) []Issue {
+	if len(refined) == 0 {
+		return nil
+	}
+	out := make([]Issue, len(refined))
+	for i, iss := range refined {
+		msg := iss.Message
+		if redact {
+			msg = redactMessage(msg)
+		}
+		out[i] = Issue{
+			Code:     iss.Code,
+			Message:  msg,
+			Category: iss.Category,
+			Severity: iss.Severity,
+		}
+	}
+	return out
+}
+
+// redactMessage replaces content inside the first pair of single quotes with '***'.
+//
+// It locates the opening quote, then finds the first closing quote that
+// follows it. This correctly handles passwords that contain apostrophes
+// (e.g. "it's") and messages that carry more than two quote markers.
+func redactMessage(msg string) string {
+	start := strings.Index(msg, "'")
+	if start == -1 {
+		return msg
+	}
+	// Search for the closing quote starting immediately after the opening one.
+	rest := msg[start+1:]
+	relEnd := strings.Index(rest, "'")
+	if relEnd == -1 {
+		return msg
+	}
+	end := start + 1 + relEnd
+	return msg[:start+1] + "***" + msg[end:]
 }

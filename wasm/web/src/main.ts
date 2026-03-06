@@ -8,6 +8,7 @@ import { RequirementsList } from './components/RequirementsList';
 import { IssueList } from './components/IssueList';
 import { SuggestionsList } from './components/SuggestionsList';
 import { ConfigPanel } from './components/ConfigPanel';
+import { applyPolicy } from './policies';
 
 const app = document.querySelector('#app') as HTMLElement;
 app.innerHTML = `
@@ -24,14 +25,14 @@ app.innerHTML = `
   </div>
 `;
 
-// Default Config
-let currentConfig: PassCheckConfig = {
+// Default Config - apply policy if preset is set
+let currentConfig: PassCheckConfig = applyPolicy(undefined, {
   minLength: 8,
   requireUpper: true,
   requireLower: true,
   requireDigit: true,
   requireSymbol: false,
-};
+});
 
 // Initialize Components
 const passwordInput = new PasswordInput(document.querySelector('#password-input-root') as HTMLElement, (password) => {

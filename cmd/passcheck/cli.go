@@ -28,6 +28,24 @@ type options struct {
 	minLength int // 0 = use default
 }
 
+// errWriter wraps an io.Writer and records the first write error.
+// Once an error is recorded all subsequent writes are no-ops, which
+// lets callers chain multiple fmt.Fprintf calls and inspect the result
+// once at the end rather than checking every call individually.
+type errWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (ew *errWriter) Write(p []byte) (int, error) {
+	if ew.err != nil {
+		return 0, ew.err
+	}
+	n, err := ew.w.Write(p)
+	ew.err = err
+	return n, err
+}
+
 // parseArgs parses command-line arguments into options.
 //
 // Flags (--flag or -f) can appear anywhere; the first non-flag
@@ -85,25 +103,38 @@ func parseArgs(args []string) (options, error) {
 // stdout and stderr are the output writers; envNoColor reflects
 // whether the NO_COLOR environment variable is set.
 func run(stdout, stderr io.Writer, args []string, envNoColor bool) int {
-	opts, err := parseArgs(args)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
+	ew := &errWriter{w: stderr}
+
+	opts, parseErr := parseArgs(args)
+	if parseErr != nil {
+		_, _ = fmt.Fprintf(ew, "Error: %v\n", parseErr)
+		if ew.err != nil {
+			return exitError
+		}
 		return exitUsageError
 	}
 
 	if opts.help {
-		printHelp(stdout)
+		if helpErr := printHelp(stdout); helpErr != nil {
+			_, _ = fmt.Fprintf(ew, "Error writing output: %v\n", helpErr)
+			return exitError
+		}
 		return exitOK
 	}
 
 	if opts.showVer {
-		fmt.Fprintf(stdout, "passcheck %s\n", version)
+		vew := &errWriter{w: stdout}
+		_, _ = fmt.Fprintf(vew, "passcheck %s\n", version)
+		if vew.err != nil {
+			_, _ = fmt.Fprintf(ew, "Error writing output: %v\n", vew.err)
+			return exitError
+		}
 		return exitOK
 	}
 
 	if opts.password == "" {
-		fmt.Fprintln(stderr, "Error: password argument required")
-		fmt.Fprintln(stderr, "Run 'passcheck --help' for usage")
+		_, _ = fmt.Fprintln(ew, "Error: password argument required")
+		_, _ = fmt.Fprintln(ew, "Run 'passcheck --help' for usage")
 		return exitError
 	}
 
@@ -116,9 +147,9 @@ func run(stdout, stderr io.Writer, args []string, envNoColor bool) int {
 		cfg.MaxIssues = 0 // show all issues
 	}
 
-	result, err := passcheck.CheckWithConfig(opts.password, cfg)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
+	result, checkErr := passcheck.CheckWithConfig(opts.password, cfg)
+	if checkErr != nil {
+		_, _ = fmt.Fprintf(ew, "Error: %v\n", checkErr)
 		return exitError
 	}
 
@@ -127,60 +158,68 @@ func run(stdout, stderr io.Writer, args []string, envNoColor bool) int {
 	}
 
 	useColor := !opts.noColor && !envNoColor
-	printResult(stdout, result, opts, useColor)
+	if printErr := printResult(stdout, result, opts, useColor); printErr != nil {
+		_, _ = fmt.Fprintf(ew, "Error writing output: %v\n", printErr)
+		return exitError
+	}
 	return exitOK
 }
 
-// printResult writes the formatted human-readable result.
-func printResult(w io.Writer, r passcheck.Result, opts options, useColor bool) {
+// printResult writes the formatted human-readable result and returns any
+// write error encountered.
+func printResult(w io.Writer, r passcheck.Result, opts options, useColor bool) error {
+	ew := &errWriter{w: w}
+
 	// Score line with visual meter.
-	fmt.Fprintf(w, "Score:   %s\n", scoreMeter(r.Score, useColor))
+	_, _ = fmt.Fprintf(ew, "Score:   %s\n", scoreMeter(r.Score, useColor))
 
 	// Verdict with color.
 	verdict := r.Verdict
 	if useColor {
 		verdict = colorize(r.Verdict, verdictColor(r.Verdict))
 	}
-	fmt.Fprintf(w, "Verdict: %s\n", verdict)
+	_, _ = fmt.Fprintf(ew, "Verdict: %s\n", verdict)
 
 	// Entropy (always in verbose, otherwise only when there are no issues).
 	if opts.verbose {
-		fmt.Fprintf(w, "Entropy: %.2f bits\n", r.Entropy)
+		_, _ = fmt.Fprintf(ew, "Entropy: %.2f bits\n", r.Entropy)
 	} else {
-		fmt.Fprintf(w, "Entropy: %.1f bits\n", r.Entropy)
+		_, _ = fmt.Fprintf(ew, "Entropy: %.1f bits\n", r.Entropy)
 	}
 
 	// Issues.
 	if len(r.Issues) > 0 {
 		if opts.verbose {
-			fmt.Fprintf(w, "\nIssues (%d):\n", len(r.Issues))
+			_, _ = fmt.Fprintf(ew, "\nIssues (%d):\n", len(r.Issues))
 		} else {
-			fmt.Fprintln(w, "\nIssues:")
+			_, _ = fmt.Fprintln(ew, "\nIssues:")
 		}
 		for _, iss := range r.Issues {
 			marker := "  - "
 			if useColor {
 				marker = "  " + colorize("-", ansiRed) + " "
 			}
-			fmt.Fprintf(w, "%s%s\n", marker, iss.Message)
+			_, _ = fmt.Fprintf(ew, "%s%s\n", marker, iss.Message)
 		}
 	}
 
 	// Strengths / suggestions.
 	if len(r.Suggestions) > 0 {
-		fmt.Fprintln(w, "\nStrengths:")
+		_, _ = fmt.Fprintln(ew, "\nStrengths:")
 		for _, s := range r.Suggestions {
 			marker := "  + "
 			if useColor {
 				marker = "  " + colorize("+", ansiGreen) + " "
 			}
-			fmt.Fprintf(w, "%s%s\n", marker, s)
+			_, _ = fmt.Fprintf(ew, "%s%s\n", marker, s)
 		}
 	}
 
 	if len(r.Issues) == 0 && len(r.Suggestions) == 0 {
-		fmt.Fprintln(w, "\nNo issues found.")
+		_, _ = fmt.Fprintln(ew, "\nNo issues found.")
 	}
+
+	return ew.err
 }
 
 // printJSON encodes the result as indented JSON.
@@ -188,15 +227,16 @@ func printJSON(stdout, stderr io.Writer, r passcheck.Result) int {
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(r); err != nil {
-		fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+		ew := &errWriter{w: stderr}
+		_, _ = fmt.Fprintf(ew, "Error encoding JSON: %v\n", err)
 		return exitError
 	}
 	return exitOK
 }
 
-// printHelp writes the CLI usage information.
-func printHelp(w io.Writer) {
-	fmt.Fprintf(w, `passcheck %s - Password strength checker
+// printHelp writes the CLI usage information and returns any write error.
+func printHelp(w io.Writer) error {
+	_, err := fmt.Fprintf(w, `passcheck %s - Password strength checker
 
 Usage:
   passcheck <password> [flags]
@@ -218,4 +258,5 @@ Examples:
   passcheck "short" --min-length=8 --verbose
   passcheck -- "-dashpassword"
 `, version)
+	return err
 }

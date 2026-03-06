@@ -12,7 +12,7 @@ package passcheck
 //   - No composition rules (no required uppercase, lowercase, digits, or symbols)
 //   - No character restrictions (allows maximum user flexibility)
 //   - Dictionary checking enabled to prevent common passwords
-//   - Pattern detection disabled (focuses on length and uniqueness)
+//   - Pattern detection effectively disabled (PatternMinLength set to 99)
 //
 // Suitable for:
 //   - General-purpose applications
@@ -37,7 +37,7 @@ func NISTConfig() Config {
 		MaxRepeats:       99, // Effectively unlimited (NIST doesn't restrict)
 		PatternMinLength: 99, // Effectively disabled (very high threshold)
 		MaxIssues:        5,
-		DisableLeet:      false,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }
 
@@ -82,7 +82,7 @@ func PCIDSSConfig() Config {
 		MaxRepeats:       3,
 		PatternMinLength: 4,
 		MaxIssues:        5,
-		DisableLeet:      false,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }
 
@@ -125,7 +125,7 @@ func OWASPConfig() Config {
 		MaxRepeats:       3,
 		PatternMinLength: 4,
 		MaxIssues:        5,
-		DisableLeet:      false,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }
 
@@ -171,7 +171,7 @@ func EnterpriseConfig() Config {
 		MaxRepeats:       2,  // Stricter than default
 		PatternMinLength: 3,  // More aggressive pattern detection
 		MaxIssues:        10, // Show more issues for comprehensive feedback
-		DisableLeet:      false,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }
 
@@ -217,6 +217,6 @@ func UserFriendlyConfig() Config {
 		MaxRepeats:       4, // More lenient
 		PatternMinLength: 5, // Less aggressive pattern detection
 		MaxIssues:        3, // Fewer issues shown
-		DisableLeet:      false,
+		EntropyMode:      EntropyModeAdvanced,
 	}
 }

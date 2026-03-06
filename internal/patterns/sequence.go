@@ -34,9 +34,10 @@ func checkSequence(password string, opts Options) []issue.Issue {
 		for _, run := range findArithmeticRuns(runes, step, opts.SequenceMinLen) {
 			if !seen[run] {
 				seen[run] = true
-				issues = append(issues, issue.New(
+				issues = append(issues, issue.NewPattern(
 					issue.CodePatternSequence,
 					fmt.Sprintf("Contains sequence: '%s'", run),
+					run,
 					issue.CategoryPattern,
 					issue.SeverityMed,
 				))

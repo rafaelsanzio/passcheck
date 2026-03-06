@@ -17,8 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - FuzzCheck
-          - FuzzCheckBytes
+          - FuzzCheckWithConfig
+          - FuzzRedactMessage
     steps:
       - uses: actions/checkout@v4
 

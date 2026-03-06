@@ -51,18 +51,32 @@ func NewMemoryCacheWithTTL(maxEntries int, ttl time.Duration) *MemoryCache {
 }
 
 // Get returns the cached value for key if present and not expired.
+//
+// The common (non-expired) path acquires only a read lock so that
+// concurrent reads do not serialize behind a single write lock.
+// A write lock is acquired only when an expired entry must be evicted.
 func (m *MemoryCache) Get(key string) (value string, ok bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
 	e, ok := m.entries[key]
-	if !ok || time.Now().After(e.expiry) {
-		if ok {
-			delete(m.entries, key)
-			m.removeKey(key)
-		}
+	m.mu.RUnlock()
+
+	if !ok {
 		return "", false
 	}
-	return e.value, true
+	if !time.Now().After(e.expiry) {
+		return e.value, true
+	}
+
+	// Entry exists but is expired — upgrade to write lock for eviction.
+	m.mu.Lock()
+	// Re-check under the write lock; another goroutine may have already
+	// evicted or refreshed the entry between the RUnlock and Lock.
+	if e2, still := m.entries[key]; still && time.Now().After(e2.expiry) {
+		delete(m.entries, key)
+		m.removeKey(key)
+	}
+	m.mu.Unlock()
+	return "", false
 }
 
 // Set stores value for key with the given TTL.

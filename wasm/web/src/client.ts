@@ -1,4 +1,13 @@
 
+export interface PenaltyWeights {
+    ruleViolation?: number;
+    patternMatch?: number;
+    dictionaryMatch?: number;
+    contextMatch?: number;
+    hibpBreach?: number;
+    entropyWeight?: number;
+}
+
 export interface PassCheckConfig {
     preset?: 'nist' | 'pci' | 'owasp' | 'enterprise' | 'userfriendly';
     minLength?: number;
@@ -15,6 +24,11 @@ export interface PassCheckConfig {
     disableLeet?: boolean;
     useHibp?: boolean;
     hibpResult?: { breached: boolean; count: number };
+    passphraseMode?: boolean;
+    minWords?: number;
+    wordDictSize?: number;
+    entropyMode?: 'simple' | 'advanced' | 'pattern-aware';
+    penaltyWeights?: PenaltyWeights;
 }
 
 export interface Issue {

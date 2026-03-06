@@ -15,6 +15,7 @@ package scoring
 import (
 	"github.com/rafaelsanzio/passcheck/internal/entropy"
 	"github.com/rafaelsanzio/passcheck/internal/issue"
+	"github.com/rafaelsanzio/passcheck/internal/passphrase"
 	"github.com/rafaelsanzio/passcheck/internal/rules"
 )
 
@@ -37,6 +38,7 @@ const (
 	MaxLengthBonus    = 20 // cap on length bonus
 	BonusPerCharset   = 3  // per charset type beyond the first
 	MaxCharsetBonus   = 9  // cap (4 types → 3 × 3 = 9)
+	BonusPassphrase   = 25 // bonus for detected passphrases (4+ words)
 )
 
 // Entropy-to-score mapping constants.
@@ -108,16 +110,81 @@ func CalculateWith(entropyBits float64, password string, issues IssueSet, minLen
 	return clamp(score, 0, 100)
 }
 
-// Verdict maps a score (0-100) to a human-readable strength label.
+// CalculateWithPassphrase computes a password strength score from 0 to 100,
+// similar to [CalculateWith], but reduces dictionary penalties when the password
+// is detected as a passphrase (has multiple words). This enables passphrase-friendly
+// scoring that rewards multi-word combinations.
+//
+// passphraseInfo can be nil if passphrase detection is disabled or the password
+// is not a passphrase. When non-nil and IsPassphrase is true, dictionary penalties
+// are eliminated (dictionary words are expected and desired in passphrases).
+//
+// weights can be nil to use default weights (all multipliers = 1.0).
+func CalculateWithPassphrase(entropyBits float64, password string, issues IssueSet, minLength int, passphraseInfo *passphrase.Info, weights *Weights) int {
+	// --- Base score from entropy ---
+	baseEntropy := entropyBits * maxScoreBase / entropyFull
+
+	// --- Bonuses ---
+	bonus := lengthBonusWith(password, minLength) + charsetBonus(password)
+	// Add passphrase bonus for multi-word passphrases
+	if passphraseInfo != nil && passphraseInfo.IsPassphrase {
+		bonus += BonusPassphrase
+	}
+
+	// --- Penalties ---
+	// Eliminate dictionary penalties for passphrases (dictionary words are expected and desired)
+	dictPenalty := PenaltyPerDictMatch
+	if passphraseInfo != nil && passphraseInfo.IsPassphrase {
+		dictPenalty = 0 // No dictionary penalties for passphrases
+	}
+
+	// Apply weights if provided
+	var base float64
+	var penalty int
+	if weights != nil {
+		base, penalty = weights.applyWeights(baseEntropy, issues, dictPenalty)
+	} else {
+		base = baseEntropy
+		penalty = len(issues.Rules)*PenaltyPerRule +
+			len(issues.Patterns)*PenaltyPerPattern +
+			len(issues.Dictionary)*dictPenalty +
+			len(issues.Context)*PenaltyPerContext +
+			len(issues.HIBP)*PenaltyPerHIBP
+	}
+
+	score := int(base) + bonus - penalty
+
+	return clamp(score, 0, 100)
+}
+
+// Verdict maps a score (0-100) to a human-readable strength label using
+// the built-in default thresholds.
 func Verdict(score int) string {
+	return VerdictWith(score, ThresholdVeryWeak, ThresholdWeak, ThresholdOkay, ThresholdStrong)
+}
+
+// VerdictWith maps a score to a verdict label using caller-supplied thresholds.
+//
+// The four threshold parameters define the inclusive upper bounds for each
+// verdict tier:
+//
+//	score ≤ veryWeakMax → "Very Weak"
+//	score ≤ weakMax     → "Weak"
+//	score ≤ okayMax     → "Okay"
+//	score ≤ strongMax   → "Strong"
+//	score > strongMax   → "Very Strong"
+//
+// Callers are responsible for ensuring veryWeakMax < weakMax < okayMax < strongMax.
+// When the built-in defaults are desired, use [Verdict] instead.
+func VerdictWith(score, veryWeakMax, weakMax, okayMax, strongMax int) string {
 	switch {
-	case score <= ThresholdVeryWeak:
+	case score <= veryWeakMax:
 		return "Very Weak"
-	case score <= ThresholdWeak:
+	case score <= weakMax:
 		return "Weak"
-	case score <= ThresholdOkay:
+	case score <= okayMax:
 		return "Okay"
-	case score <= ThresholdStrong:
+	case score <= strongMax:
 		return "Strong"
 	default:
 		return "Very Strong"
@@ -144,8 +211,9 @@ func lengthBonusWith(password string, minLength int) int {
 
 // charsetBonus awards extra points for using multiple character set types.
 func charsetBonus(password string) int {
-	info := entropy.AnalyzeCharsets(password)
+	info, _ := entropy.AnalyzeCharsets(password)
 	count := info.SetCount()
+
 	if count <= 1 {
 		return 0
 	}

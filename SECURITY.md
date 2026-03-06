@@ -15,12 +15,15 @@ If you discover a security vulnerability, please report it responsibly:
 3. Include a clear description and reproduction steps.
 4. Allow reasonable time for a fix before public disclosure.
 
+For an automated and manual **security assessment** (tooling, findings, and mitigations), see [docs/SECURITY_ASSESSMENT.md](docs/SECURITY_ASSESSMENT.md). Run `make check` (which includes `make security`) for vulnerability and security lint checks.
+
 ## Security Audit Checklist
 
 The following items have been reviewed for the v1.0.0 release:
 
 - [x] **No password logging**: the library never logs, prints, or persists
-  password values. Only aggregate scores and generic descriptions are returned.
+  password values. Results contain only aggregate scores and generic
+  descriptions. Substrings can be redacted using `Config.RedactSensitive = true`.
 - [x] **Secure memory handling**: `CheckBytes` and `CheckBytesWithConfig` zero
   the input `[]byte` immediately after analysis using Go 1.21 `clear()`.
 - [x] **Input length limits**: passwords are truncated to 1024 runes

@@ -19,17 +19,22 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version: "1.24"
 
       - name: Run go vet
         run: go vet ./...
 
-      # Install golangci-lint with current Go so it matches the toolchain (avoids go1.26 vs binary mismatch)
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
+      # Official action handles caching and exact version pinning —
+      # avoids the fragility of `go install golangci-lint@latest`.
       - name: Run golangci-lint
-        run: golangci-lint run --timeout=5m
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.0
+          args: --timeout=5m
+
+      # Detect uncommitted go.mod / go.sum drift.
+      - name: Check go mod tidy
+        run: go mod tidy && git diff --exit-code go.mod go.sum
 
   # ─── Test ──────────────────────────────────────────────────────────────────
   test:
@@ -38,10 +43,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # go.mod requires Go 1.24 — testing on earlier versions is misleading.
         os: [ubuntu-latest]
-        go-version: ["1.21", "1.22", "stable"]
+        go-version: ["1.24", "stable"]
         include:
-          # Also test on macOS and Windows with the latest Go.
+          # Also test on macOS and Windows with the latest stable Go.
           - os: macos-latest
             go-version: stable
           - os: windows-latest
@@ -67,6 +73,23 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # ─── Security ──────────────────────────────────────────────────────────────
+  security:
+    name: Security (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
   # ─── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
@@ -79,14 +102,23 @@ jobs:
         with:
           go-version: stable
 
-      - name: Build library
+      - name: Build core module
         run: go build ./...
+
+      - name: Build middleware/gin submodule
+        run: go build ./...
+        working-directory: middleware/gin
+
+      - name: Build middleware/echo submodule
+        run: go build ./...
+        working-directory: middleware/echo
+
+      - name: Build middleware/fiber submodule
+        run: go build ./...
+        working-directory: middleware/fiber
 
       - name: Build CLI
         run: go build -o /dev/null ./cmd/passcheck
 
       - name: Build examples
-        run: |
-          go build -o /dev/null ./examples/basic
-          go build -o /dev/null ./examples/config
-          go build -o /dev/null ./examples/webserver
+        run: go build -o /dev/null ./examples/...

@@ -2,7 +2,6 @@
 //
 // This file provides constant-time comparison primitives to reduce
 // timing side channels when comparing secrets (e.g. password blocklists).
-
 package safemem
 
 import "crypto/subtle"
@@ -62,6 +61,16 @@ func constantTimeIntEqZero(x int) int {
 // If needle is empty, returns true. If needle is longer than haystack,
 // returns false. Otherwise scans every possible starting position and
 // combines results in constant time.
+//
+// WARNING: "Constant time" here refers to branch-free XOR accumulation,
+// not wall-clock constant time. Modern CPUs and their cache/prefetcher
+// pipelines mean that wall-clock duration still varies with string length
+// and content (cache-line effects, branch prediction, memory latency).
+// This function reduces timing leakage compared to a naive early-exit loop
+// but does NOT provide a hard wall-clock constant-time guarantee on real
+// hardware under adversarial repeated measurement. For the strongest
+// timing-attack resistance, combine ConstantTimeMode with a non-zero
+// MinExecutionTimeMs so all responses take a uniform minimum duration.
 func ConstantTimeContains(haystack, needle string) bool {
 	if needle == "" {
 		return true

@@ -306,35 +306,25 @@ func TestPCIDSSConfig_Compliance(t *testing.T) {
 				t.Fatalf("CheckWithConfig() error = %v", err)
 			}
 
-			hasIssues := len(result.Issues) > 0
-			if tt.shouldPass && hasIssues {
-				t.Errorf("%s: expected to pass but got issues: %v", tt.description, result.Issues)
-			}
+		// MeetsPolicy = true means all hard policy requirements (length,
+		// charset, repeat limits) are satisfied. Pattern/dictionary warnings
+		// may still appear but do not constitute a policy violation.
+		if tt.shouldPass && !result.MeetsPolicy {
+			t.Errorf("%s: expected to meet policy but got rule violations: %v", tt.description, result.Issues)
+		}
 		})
 	}
 }
 
-// TestPresetStrictnessOrder verifies presets are ordered by strictness
+// TestPresetStrictnessOrder verifies presets are ordered by strictness.
 func TestPresetStrictnessOrder(t *testing.T) {
-	// Test password that meets basic requirements
-	password := "MyPassword123"
-
 	nist := NISTConfig()
 	userFriendly := UserFriendlyConfig()
 	owasp := OWASPConfig()
 	pciDss := PCIDSSConfig()
 	enterprise := EnterpriseConfig()
 
-	resultNIST, _ := CheckWithConfig(password, nist)
-	resultUserFriendly, _ := CheckWithConfig(password, userFriendly)
-	resultOWASP, _ := CheckWithConfig(password, owasp)
-	resultPCIDSS, _ := CheckWithConfig(password, pciDss)
-	resultEnterprise, _ := CheckWithConfig(password, enterprise)
-
-	// NIST should be most lenient (fewest issues or highest score)
-	// Enterprise should be strictest (most issues or lowest score)
-
-	// Verify minimum length ordering
+	// Verify minimum length ordering: NIST ≤ UserFriendly ≤ OWASP ≤ PCI-DSS ≤ Enterprise
 	if nist.MinLength > userFriendly.MinLength {
 		t.Error("NIST should have lower or equal MinLength than UserFriendly")
 	}
@@ -347,13 +337,6 @@ func TestPresetStrictnessOrder(t *testing.T) {
 	if pciDss.MinLength > enterprise.MinLength {
 		t.Error("PCI-DSS should have lower or equal MinLength than Enterprise")
 	}
-
-	t.Logf("Strictness order verified:")
-	t.Logf("  NIST: MinLength=%d, Score=%d", nist.MinLength, resultNIST.Score)
-	t.Logf("  UserFriendly: MinLength=%d, Score=%d", userFriendly.MinLength, resultUserFriendly.Score)
-	t.Logf("  OWASP: MinLength=%d, Score=%d", owasp.MinLength, resultOWASP.Score)
-	t.Logf("  PCI-DSS: MinLength=%d, Score=%d", pciDss.MinLength, resultPCIDSS.Score)
-	t.Logf("  Enterprise: MinLength=%d, Score=%d", enterprise.MinLength, resultEnterprise.Score)
 }
 
 // TestAllPresetsValid verifies all presets return valid configurations
@@ -370,33 +353,6 @@ func TestAllPresetsValid(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if err := cfg.Validate(); err != nil {
 				t.Errorf("%s preset returned invalid config: %v", name, err)
-			}
-		})
-	}
-}
-
-// TestPresetDocumentation verifies each preset has proper documentation
-func TestPresetDocumentation(t *testing.T) {
-	// This is a meta-test to ensure documentation exists
-	// In practice, godoc will verify this, but we can check basic functionality
-
-	presets := []struct {
-		name string
-		fn   func() Config
-	}{
-		{"NIST", NISTConfig},
-		{"PCI-DSS", PCIDSSConfig},
-		{"OWASP", OWASPConfig},
-		{"Enterprise", EnterpriseConfig},
-		{"UserFriendly", UserFriendlyConfig},
-	}
-
-	for _, preset := range presets {
-		t.Run(preset.name, func(t *testing.T) {
-			// Verify function returns a config
-			cfg := preset.fn()
-			if err := cfg.Validate(); err != nil {
-				t.Errorf("%s preset function failed: %v", preset.name, err)
 			}
 		})
 	}

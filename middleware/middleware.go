@@ -1,7 +1,8 @@
 // Package middleware provides HTTP middleware for password strength validation
-// using passcheck. It supports net/http and optional adapters for Echo, Gin,
-// Fiber, and Chi. Use [Config] to set minimum score, password extraction, and
-// failure handling.
+// using passcheck. It supports net/http and Chi out of the box (zero additional
+// dependencies). Framework-specific adapters for Echo, Gin, and Fiber live in
+// their own submodules so downstream projects only pull in the framework they
+// actually use.
 //
 // # net/http (zero additional dependencies)
 //
@@ -14,15 +15,14 @@
 //
 //	r.Use(middleware.Chi(middleware.Config{MinScore: 60}))
 //
-// # Echo, Gin, Fiber (optional)
+// # Echo, Gin, Fiber (separate submodules)
 //
-// Adapters are in build-tagged files. To use them, add the framework dependency
-// and build with the tag, for example:
+//	go get github.com/rafaelsanzio/passcheck/middleware/echo
+//	go get github.com/rafaelsanzio/passcheck/middleware/gin
+//	go get github.com/rafaelsanzio/passcheck/middleware/fiber
 //
-//	go get github.com/labstack/echo/v4
-//	go build -tags=echo ./...
-//
-// Then use middleware.Echo(cfg), middleware.Gin(cfg), or middleware.Fiber(cfg).
+// Each submodule exports a single constructor (Echo, Gin, Fiber) that accepts
+// this package's [Config] type.
 package middleware
 
 import (
@@ -62,8 +62,6 @@ func DefaultConfig() Config {
 	return Config{
 		MinScore:        60,
 		PasswordField:   "password",
-		OnFailure:       nil,
-		SkipIfEmpty:     false,
 		PasscheckConfig: passcheck.DefaultConfig(),
 	}
 }

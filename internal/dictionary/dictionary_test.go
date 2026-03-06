@@ -349,48 +349,8 @@ func TestContainsLeet(t *testing.T) {
 // Word Helpers
 // ---------------------------------------------------------------------------
 
-func TestIndexOfSubstring(t *testing.T) {
-	tests := []struct {
-		s      string
-		substr string
-		want   int
-	}{
-		{"hello world", "world", 6},
-		{"hello", "hello", 0},
-		{"hello", "xyz", -1},
-		{"", "a", -1},
-		{"abc", "", 0},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.s+"_"+tt.substr, func(t *testing.T) {
-			if got := indexOfSubstring(tt.s, tt.substr); got != tt.want {
-				t.Errorf("indexOfSubstring(%q, %q) = %d, want %d", tt.s, tt.substr, got, tt.want)
-			}
-		})
-	}
-}
 
-func TestIsRegionCovered(t *testing.T) {
-	covered := []bool{true, true, true, false, false}
-	if !isRegionCovered(covered, 0, 3) {
-		t.Error("region 0:3 should be covered")
-	}
-	if isRegionCovered(covered, 2, 3) {
-		t.Error("region 2:5 should not be fully covered")
-	}
-}
-
-func TestMarkRegion(t *testing.T) {
-	covered := make([]bool, 5)
-	markRegion(covered, 1, 3)
-	expected := []bool{false, true, true, true, false}
-	for i, v := range expected {
-		if covered[i] != v {
-			t.Errorf("covered[%d] = %v, want %v", i, covered[i], v)
-		}
-	}
-}
 
 // ---------------------------------------------------------------------------
 // CheckWith (Options / Custom Lists)

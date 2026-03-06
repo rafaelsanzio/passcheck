@@ -4,13 +4,19 @@
 [![codecov](https://codecov.io/gh/rafaelsanzio/passcheck/branch/main/graph/badge.svg)](https://codecov.io/gh/rafaelsanzio/passcheck)
 [![Go Reference](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck)
 [![Go Report Card](https://goreportcard.com/badge/github.com/rafaelsanzio/passcheck)](https://goreportcard.com/report/github.com/rafaelsanzio/passcheck)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/rafaelsanzio/passcheck)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![middleware/gin](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/gin.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/gin)
+[![middleware/echo](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/echo.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/echo)
+[![middleware/fiber](https://pkg.go.dev/badge/github.com/rafaelsanzio/passcheck/middleware/fiber.svg)](https://pkg.go.dev/github.com/rafaelsanzio/passcheck/middleware/fiber)
 
 A comprehensive, zero-dependency Go library for password strength checking.
 
 Passcheck evaluates passwords against multiple criteria — basic rules, pattern
 detection, dictionary checks, and entropy calculation — returning an actionable
 result with a score, verdict, and specific feedback.
+
+**[Quick Start Guide](docs/quickstart.md)** — get up and running in 5 minutes · **[pkg.go.dev reference](https://pkg.go.dev/github.com/rafaelsanzio/passcheck)**
 
 ## Features
 
@@ -22,8 +28,10 @@ result with a score, verdict, and specific feedback.
 - **Policy Presets** — NIST, PCI-DSS, OWASP, Enterprise, UserFriendly in one call
 - **Custom Blocklists** — Add organization-specific passwords and words via config
 - **Breach Database (HIBP)** — Optional [Have I Been Pwned](https://haveibeenpwned.com/) integration via k-anonymity (only 5-char hash prefix sent)
-- **HTTP Middleware** — Drop-in middleware for net/http (Chi, Echo, Gin, Fiber with optional build tags)
-- **Entropy Calculation** — Shannon entropy based on character-set diversity
+- **HTTP Middleware** — Drop-in middleware for net/http; framework adapters (Gin, Echo, Fiber) as independent submodules
+- **Entropy Calculation** — Multiple modes: Simple (character-set diversity), Advanced (pattern-aware reduction), Pattern-Aware (includes Markov-chain analysis)
+- **Passphrase Support** — Detects multi-word passphrases and uses word-based entropy (diceware model)
+- **Configurable Scoring Weights** — Customize penalty multipliers and entropy weight to match organizational security priorities
 - **Configurable Rules** — Adjust minimum length, character requirements, thresholds
 - **Actionable Feedback** — Prioritized issues and positive suggestions
 - **Real-Time Feedback** — `CheckIncremental` / `CheckIncrementalWithConfig` with delta for live strength meters
@@ -55,9 +63,9 @@ git clone https://github.com/rafaelsanzio/passcheck.git
 cd passcheck
 make build       # builds to bin/passcheck
 make install     # installs to $GOPATH/bin
-make test        # run tests (on macOS with Go < 1.24, use make test-macos or see [TROUBLESHOOTING.md](TROUBLESHOOTING.md))
-make wasm    # builds WASM and copies to wasm/web/public/ for the modern web app
-make serve-wasm # starts the modern TypeScript/Vite web app (requires Node.js)
+make test        # run tests
+make wasm        # builds WASM and copies to wasm/web/public/ for the modern web app
+make serve-wasm  # starts the modern TypeScript/Vite web app (requires Node.js)
 ```
 
 ## Quick Start
@@ -199,6 +207,7 @@ type IncrementalDelta struct {
 type Result struct {
     Score       int      // 0 (weakest) to 100 (strongest)
     Verdict     string   // "Very Weak", "Weak", "Okay", "Strong", "Very Strong"
+    MeetsPolicy bool     // true when all configured minimum requirements (length, charset, repeats) are satisfied
     Issues      []Issue  // Prioritized, deduplicated problems (Code, Message, Category, Severity)
     Suggestions []string // Positive feedback about strengths
     Entropy     float64  // Estimated entropy in bits
@@ -244,25 +253,32 @@ if err != nil {
 
 ### Config Fields
 
-| Field                | Type          | Default | Description                                                                                                                           |
-| -------------------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `MinLength`          | `int`         | 12      | Minimum runes required                                                                                                                |
-| `RequireUpper`       | `bool`        | true    | Require uppercase letter                                                                                                              |
-| `RequireLower`       | `bool`        | true    | Require lowercase letter                                                                                                              |
-| `RequireDigit`       | `bool`        | true    | Require numeric digit                                                                                                                 |
-| `RequireSymbol`      | `bool`        | true    | Require symbol character                                                                                                              |
-| `MaxRepeats`         | `int`         | 3       | Max consecutive identical characters                                                                                                  |
-| `PatternMinLength`   | `int`         | 4       | Min length for keyboard/sequence detection                                                                                            |
-| `MaxIssues`          | `int`         | 5       | Max issues returned (0 = no limit)                                                                                                    |
-| `CustomPasswords`    | `[]string`    | nil     | Additional passwords to block (case-insensitive)                                                                                      |
-| `CustomWords`        | `[]string`    | nil     | Additional words to detect as substrings                                                                                              |
-| `ContextWords`       | `[]string`    | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
-| `DisableLeet`        | `bool`        | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
-| `HIBPChecker`        | `HIBPChecker` | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
-| `HIBPMinOccurrences` | `int`         | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
-| `HIBPResult`         | `*HIBPCheckResult` | nil | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                      |
-| `ConstantTimeMode`   | `bool`        | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
-| `MinExecutionTimeMs` | `int`         | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
+| Field                | Type               | Default | Description                                                                                                                           |
+| -------------------- | ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinLength`          | `int`              | 12      | Minimum runes required                                                                                                                |
+| `RequireUpper`       | `bool`             | true    | Require uppercase letter                                                                                                              |
+| `RequireLower`       | `bool`             | true    | Require lowercase letter                                                                                                              |
+| `RequireDigit`       | `bool`             | true    | Require numeric digit                                                                                                                 |
+| `RequireSymbol`      | `bool`             | true    | Require symbol character                                                                                                              |
+| `MaxRepeats`         | `int`              | 3       | Max consecutive identical characters                                                                                                  |
+| `PatternMinLength`   | `int`              | 4       | Min length for keyboard/sequence detection                                                                                            |
+| `MaxIssues`          | `int`              | 5       | Max issues returned (0 = no limit)                                                                                                    |
+| `CustomPasswords`    | `[]string`         | nil     | Additional passwords to block (case-insensitive)                                                                                      |
+| `CustomWords`        | `[]string`         | nil     | Additional words to detect as substrings                                                                                              |
+| `ContextWords`       | `[]string`         | nil     | User-specific terms (username, email, etc.) to reject in passwords                                                                    |
+| `DisableLeet`        | `bool`             | false   | Disable leetspeak normalization in dictionary checks                                                                                  |
+| `HIBPChecker`        | `HIBPChecker`      | nil     | Optional breach check (e.g. [hibp.Client](hibp/)); see [Breach database (HIBP)](#breach-database-hibp)                                |
+| `HIBPMinOccurrences` | `int`              | 1       | Min breach count to report (when `HIBPChecker` or `HIBPResult` is set)                                                                |
+| `HIBPResult`         | `*HIBPCheckResult` | nil     | Pre-computed breach result (e.g. from WASM/JS); when set, `HIBPChecker` is ignored for that check                                     |
+| `PassphraseMode`     | `bool`             | false   | Enable passphrase-friendly scoring; detects multi-word passphrases and uses word-based entropy                                        |
+| `MinWords`           | `int`              | 4       | Minimum distinct words to consider a passphrase (only used when `PassphraseMode` is true)                                              |
+| `WordDictSize`       | `int`              | 7776    | Assumed dictionary size for word-based entropy (diceware standard; only used when `PassphraseMode` is true)                            |
+| `EntropyMode`        | `EntropyMode`      | "simple" | Entropy calculation mode: "simple" (default), "advanced" (pattern-aware), "pattern-aware" (includes Markov-chain analysis)          |
+| `PenaltyWeights`     | `*PenaltyWeights`  | nil     | Custom penalty multipliers and entropy weight; when nil, defaults to 1.0 for all weights                                                |
+| `ConstantTimeMode`   | `bool`             | false   | Use constant-time dictionary lookups to reduce timing side channels; see [SECURITY.md](SECURITY.md#timing-attack-protection-optional) |
+| `MinExecutionTimeMs` | `int`              | 0       | Min response time (ms) when `ConstantTimeMode` is true; pads with sleep to hide work duration                                         |
+| `RedactSensitive`    | `bool`             | false   | Mask password substrings in issue messages (e.g., `'***'`) to prevent logging sensitive data                                          |
+
 
 ### Custom Blocklists
 
@@ -362,19 +378,94 @@ Each preset is documented in godoc with standard references (NIST SP 800-63B, PC
 
 You can still override after calling a preset, e.g. `cfg := passcheck.NISTConfig(); cfg.CustomPasswords = myList`.
 
+### Passphrase Recognition & Support
+
+Enable passphrase-friendly scoring for multi-word passwords. When `PassphraseMode` is enabled, the library detects passphrases using word boundaries (spaces, hyphens, camelCase, snake_case) and uses word-based entropy instead of character-based entropy.
+
+```go
+cfg := passcheck.DefaultConfig()
+cfg.PassphraseMode = true
+cfg.MinWords = 4              // Require at least 4 distinct words
+cfg.WordDictSize = 7776       // Diceware standard dictionary size
+
+result, _ := passcheck.CheckWithConfig("correct-horse-battery-staple", cfg)
+// Uses word-based entropy: 4 words × log₂(7776) ≈ 51 bits
+// Dictionary penalties are eliminated (words are expected in passphrases)
+```
+
+**Key characteristics:**
+- Detects multi-word passphrases automatically
+- Uses word-based entropy (diceware model) instead of character-based entropy
+- Eliminates dictionary penalties for detected passphrases
+- Adds passphrase bonus to the score
+- Works with all entropy modes (simple, advanced, pattern-aware)
+
+See [internal/passphrase](internal/passphrase/) for implementation details.
+
+### Advanced Entropy Calculation
+
+Choose from three entropy calculation modes to match your security requirements:
+
+```go
+cfg := passcheck.DefaultConfig()
+
+// Simple mode (default): Basic character-pool × length formula
+cfg.EntropyMode = passcheck.EntropyModeSimple
+
+// Advanced mode: Reduces entropy for detected patterns
+cfg.EntropyMode = passcheck.EntropyModeAdvanced
+// "qwerty123456" will have lower entropy than "Xk9$mP2!vR7@nL4"
+
+// Pattern-aware mode: Includes Markov-chain analysis
+cfg.EntropyMode = passcheck.EntropyModePatternAware
+// Most accurate entropy estimation, accounts for character transition probabilities
+
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+**When to use each mode:**
+- **Simple**: Fast, backward-compatible, suitable for most use cases
+- **Advanced**: Better accuracy for passwords with patterns (keyboard walks, sequences)
+- **Pattern-aware**: Maximum accuracy, includes Markov-chain character transition analysis
+
+### Configurable Scoring Weights
+
+Customize penalty multipliers and entropy weight to match your organization's security priorities:
+
+```go
+cfg := passcheck.DefaultConfig()
+cfg.PenaltyWeights = &passcheck.PenaltyWeights{
+    DictionaryMatch: 2.0,  // Double dictionary penalties
+    PatternMatch:    1.5,  // Increase pattern penalties by 50%
+    EntropyWeight:   0.8,  // Reduce entropy influence (penalties matter more)
+}
+
+result, _ := passcheck.CheckWithConfig(password, cfg)
+```
+
+**Use cases:**
+- **Strict enterprise**: Increase all penalty multipliers (2.0–3.0×)
+- **Passphrase-friendly**: Reduce pattern penalties, increase entropy weight
+- **Dictionary-focused**: Heavily penalize dictionary matches (3.0–5.0×)
+- **Entropy-focused**: Increase entropy weight (1.2–1.5×) to favor high-entropy passwords
+
+All weights default to 1.0 when `PenaltyWeights` is nil or when individual fields are zero. See [docs/WEIGHT_TUNING.md](docs/WEIGHT_TUNING.md) for detailed examples and best practices.
+
 ### WebAssembly (client-side)
 
 For instant client-side feedback in the browser without a server round-trip, use the WebAssembly build. There are two options:
 
 #### Modern TypeScript/Vite Web App
 
-The [modern web application](wasm/web/README.md) provides a premium UI with TypeScript, Vite, and Web Workers for optimal performance. Build with `make wasm-web`, then start the dev server with `make serve-wasm-web` (or `cd wasm/web && npm install && npm run dev`). Features include:
+The [modern web application](wasm/web/README.md) provides a premium UI with TypeScript, Vite, and Web Workers for optimal performance. Build with `make wasm`, then start the dev server with `make serve-wasm` (or `cd wasm/web && npm install && npm run dev`). Features include:
 
 - **Modern UI**: Dark mode interface with real-time feedback
 - **TypeScript**: Type-safe client code
 - **Web Workers**: Non-blocking password checks
-- **Configurable Rules**: Full configuration panel with presets
+- **Policy Presets**: NIST, PCI-DSS, OWASP, Enterprise, UserFriendly with automatic field locking
+- **Full Configuration**: All library features configurable via UI (entropy modes, penalty weights, passphrase mode)
 - **HIBP Integration**: Secure breach database checks
+- **Policy Enforcement**: When a policy is selected, relevant parameters are locked to ensure compliance
 
 See [wasm/web/README.md](wasm/web/README.md) for installation and usage instructions.
 
@@ -392,7 +483,31 @@ mux.Handle("/register", middleware.HTTP(middleware.Config{
 }, registerHandler))
 ```
 
-The middleware extracts the password from JSON or form body, runs passcheck, and returns 400 with score and issues when the password is too weak. Optional adapters for Chi, Echo, Gin, and Fiber (build tags). See [examples/middleware](examples/middleware/) and the [middleware package](middleware/) docs.
+The middleware extracts the password from JSON or form body, runs passcheck, and returns 400 with score and issues when the password is too weak.
+
+Framework-specific adapters live in independent submodules — add only what you need:
+
+```bash
+go get github.com/rafaelsanzio/passcheck/middleware/gin
+go get github.com/rafaelsanzio/passcheck/middleware/echo
+go get github.com/rafaelsanzio/passcheck/middleware/fiber
+```
+
+```go
+// Gin
+import passcheckgin "github.com/rafaelsanzio/passcheck/middleware/gin"
+r.POST("/register", passcheckgin.Gin(middleware.Config{MinScore: 60}), handler)
+
+// Echo
+import passcheckecho "github.com/rafaelsanzio/passcheck/middleware/echo"
+e.POST("/register", handler, passcheckecho.Echo(middleware.Config{MinScore: 60}))
+
+// Fiber
+import passcheckfiber "github.com/rafaelsanzio/passcheck/middleware/fiber"
+app.Post("/register", passcheckfiber.Fiber(middleware.Config{MinScore: 60}), handler)
+```
+
+Chi uses the standard `middleware.HTTP` wrapper — no extra dependency needed. See [examples/middleware](examples/middleware/) and the [middleware package](middleware/) docs.
 
 ### Validation
 
@@ -402,33 +517,23 @@ The middleware extracts the password from JSON or form body, runs passcheck, and
 - `MaxRepeats >= 2`
 - `PatternMinLength >= 3`
 - `MaxIssues >= 0`
+- `MinWords >= 1` when `PassphraseMode` is true
+- `WordDictSize >= 2` when `PassphraseMode` is true
+- `MinExecutionTimeMs >= 0` when set
+- All `PenaltyWeights` fields must be `>= 0` (negative weights are invalid)
 
 `CheckWithConfig` calls `Validate()` automatically and returns an error
 for invalid configurations.
 
-## Security Considerations
+- For passphrases, word-based entropy uses a diceware model (word count × log₂(dictionary size))
 
-**Memory handling:** Go strings are immutable and garbage-collected — the library
-cannot zero them after use. For applications that receive passwords as `[]byte`
-(HTTP request bodies, terminal reads), use `CheckBytes` or `CheckBytesWithConfig`
-which zero the input slice immediately after analysis.
+## Security Best Practices
 
-**No logging:** The library never logs, prints, or persists passwords. Results
-contain only aggregate scores and generic issue descriptions.
+1.  **Do not log Result.Issues raw**: Issue messages may contain password substrings (e.g., dictionary matches). Log only the `Code` or use `Config.RedactSensitive = true` to mask these substrings.
+2.  **Prefer CheckBytes**: When passwords are available as `[]byte` (e.g., from HTTP request bodies), use `CheckBytes` or `CheckBytesWithConfig` to ensure the buffer is zeroed immediately after analysis.
+3.  **Enable ConstantTimeMode**: For high-assurance or remote-attacker scenarios, enable `ConstantTimeMode` to mitigate timing side channels in dictionary lookups.
+4.  **Run Security Tooling**: Integrity checks like `govulncheck` and `gosec` are recommended. Use `make security` to run them locally.
 
-**Input limits:** A maximum of 1024 runes is analysed per password to prevent
-denial-of-service through algorithmic complexity. Inputs beyond this are silently
-truncated.
-
-**Limitations:**
-
-- The Go runtime may retain copies of string data in CPU caches, swap, or core
-  dumps. `CheckBytes` reduces — but does not eliminate — the window of exposure.
-- The built-in dictionary contains ~950 common passwords and ~490 common
-  words. For breach detection, use the optional [hibp](hibp/) package
-  (k-anonymity; see [Breach database (HIBP)](#breach-database-hibp)).
-- Entropy is estimated from character-set diversity and length, not from the
-  full distribution of possible passwords.
 
 ## Architecture
 
@@ -438,16 +543,20 @@ passcheck/
 ├── config.go           # Config struct, DefaultConfig, Validate
 ├── presets.go          # NIST, PCI-DSS, OWASP, Enterprise, UserFriendly presets
 ├── hibp/               # Optional HIBP breach API client (k-anonymity)
-├── middleware/         # HTTP middleware (net/http, Chi, Echo, Gin, Fiber)
+├── middleware/         # HTTP middleware (net/http, Chi); gin/echo/fiber as submodules
 ├── internal/
 │   ├── rules/          # Basic rules: length, charsets, whitespace, repeats
-│   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution
+│   ├── patterns/       # Pattern detection: keyboard, sequence, blocks, substitution, dates
 │   ├── dictionary/     # Dictionary checks: common passwords, common words
-│   ├── entropy/        # Shannon entropy calculation
-│   ├── scoring/        # Weighted scoring algorithm
+│   ├── entropy/        # Entropy calculation (simple, advanced, pattern-aware modes)
+│   ├── passphrase/     # Passphrase detection and word-based entropy
+│   ├── scoring/        # Weighted scoring algorithm with configurable penalty weights
 │   ├── feedback/       # Issue dedup, priority sort, positive feedback
+│   ├── context/        # Context-aware detection (username, email, custom terms)
+│   ├── hibpcheck/      # HIBP breach result integration
+│   ├── issue/          # Shared issue type definitions and constants
 │   ├── leet/           # Shared leetspeak normalisation utilities
-│   └── safemem/        # Secure memory zeroing
+│   └── safemem/        # Secure memory zeroing and constant-time comparisons
 ├── cmd/passcheck/      # CLI tool
 ├── examples/           # Usage examples
 └── Makefile            # Build, test, cross-compile
@@ -464,7 +573,7 @@ and bonuses (length + character-set diversity) into a 0-100 score.
 
 ## Performance
 
-Benchmarks run on Apple Silicon (M-series), Go 1.21+. Results vary by
+Benchmarks run on Apple Silicon (M-series), Go 1.24+. Results vary by
 hardware but relative magnitudes are representative.
 
 | Input                  | Time    | Allocs | Bytes  |
@@ -499,12 +608,15 @@ go test ./... -bench=. -benchmem -count=3 -run='^$' -timeout=120s
 ## Development
 
 ```bash
-make test       # run all tests
+make test       # run tests (core module)
+make test-all   # run tests for core and middleware submodules (gin, echo, fiber)
 make cover      # coverage report
 make bench      # run benchmarks
 make lint       # go vet
 make lint-ci    # golangci-lint (comprehensive)
 make build      # build CLI
+make wasm       # build WASM binary and copy to wasm/web/public/
+make serve-wasm # build WASM and start Vite dev server (requires Node.js)
 make cross      # cross-compile for all platforms
 make clean      # remove build artifacts
 make help       # show all targets
@@ -516,13 +628,14 @@ Every push and pull request triggers a GitHub Actions pipeline that:
 
 - Runs `go vet` and [`golangci-lint`](https://golangci-lint.run/) with a
   curated linter set (see [`.golangci.yml`](.golangci.yml))
-- Runs `go test -race` on a Go version matrix (1.21, 1.22, latest) across
-  Linux, macOS, and Windows
+- Checks `go mod tidy` for dependency drift
+- Runs `go test -race` on a Go version matrix (1.24, stable) on Linux, with
+  additional jobs on macOS and Windows using stable
+- Runs [`govulncheck`](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck) for known vulnerabilities
 - Uploads coverage to [Codecov](https://codecov.io/gh/rafaelsanzio/passcheck)
-- Builds the CLI and all examples
+- Builds the core module, CLI, middleware submodules (gin, echo, fiber), and all examples
 
-A separate nightly workflow runs fuzz tests (`FuzzCheck`, `FuzzCheckBytes`)
-for 60 seconds each and uploads crash artifacts on failure.
+A separate [WASM workflow](.github/workflows/wasm.yml) builds the WebAssembly binary and reports bundle sizes on push/PR. A nightly [Fuzz workflow](.github/workflows/fuzz.yml) runs fuzz targets (`FuzzCheckWithConfig`, `FuzzRedactMessage`) and uploads crash artifacts on failure.
 
 ### Test Coverage
 

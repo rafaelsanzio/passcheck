@@ -88,9 +88,10 @@ func checkKeyboard(password string, opts Options) []issue.Issue {
 		if len(match) >= opts.KeyboardMinLen {
 			if !seen[match] {
 				seen[match] = true
-				issues = append(issues, issue.New(
+				issues = append(issues, issue.NewPattern(
 					issue.CodePatternKeyboard,
 					fmt.Sprintf("Contains keyboard pattern: '%s'", match),
+					match,
 					issue.CategoryPattern,
 					issue.SeverityMed,
 				))

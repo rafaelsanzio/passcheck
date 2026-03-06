@@ -31,12 +31,13 @@ PLATFORMS := \
 
 
 .PHONY: wasm
-wasm: wasm ## Build WASM and copy to wasm/web/public/ for the modern web app.
-	@mkdir -p wasm/web/public
-	@cp $(BIN_DIR)/passcheck.wasm wasm/web/public/ 2>/dev/null || true
-	@cp $(BIN_DIR)/wasm_exec.js wasm/web/public/ 2>/dev/null || true
-	@echo "  copied WASM files to wasm/web/public/"
-	@echo "  Run 'cd wasm/web && npm install && npm run dev' to start the development server"
+wasm: ## Build WASM binary and copy to wasm/web/public/.
+	@mkdir -p $(BIN_DIR) wasm/web/public
+	GOOS=js GOARCH=wasm go build -o $(BIN_DIR)/passcheck.wasm ./wasm
+	@cp $(BIN_DIR)/passcheck.wasm wasm/web/public/
+	@cp "$$(go env GOROOT)/misc/wasm/wasm_exec.js" wasm/web/public/
+	@echo "  WASM binary: $$(ls -lh $(BIN_DIR)/passcheck.wasm | awk '{print $$5}')"
+	@echo "  Gzip size:   $$(gzip -9 -c $(BIN_DIR)/passcheck.wasm | wc -c | awk '{printf "%.1f KB", $$1/1024}')"
 
 .PHONY: serve-wasm
 serve-wasm: wasm ## Build WASM web app and start Vite dev server (requires Node.js and npm).
@@ -54,8 +55,14 @@ cross: ## Cross-compile for all supported platforms.
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
 .PHONY: test
-test: ## Run all tests.
-	go test ./... -count=1
+test: ## Run tests for the core module.
+	go test -race ./... -count=1
+
+.PHONY: test-all
+test-all: test ## Run tests for core and middleware submodules (gin, echo, fiber).
+	@cd middleware/gin && go test -race ./... -count=1
+	@cd middleware/echo && go test -race ./... -count=1
+	@cd middleware/fiber && go test -race ./... -count=1
 
 .PHONY: cover
 cover: ## Run tests with coverage report.
@@ -78,6 +85,25 @@ lint: ## Run go vet.
 .PHONY: lint-ci
 lint-ci: ## Run golangci-lint (install: https://golangci-lint.run/welcome/install/).
 	golangci-lint run --timeout=5m
+
+# ─── Security ─────────────────────────────────────────────────────────────────
+
+.PHONY: security-vuln
+security-vuln: ## Run govulncheck for known vulnerabilities.
+	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck not found. Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; echo "Ensure \$$(go env GOPATH)/bin is in your PATH."; exit 1; }
+	govulncheck ./...
+
+.PHONY: security-gosec
+security-gosec: ## Run gosec security linter (install: go install github.com/securego/gosec/v2/cmd/gosec@latest).
+	gosec -fmt=text ./...
+
+.PHONY: security
+security: lint security-vuln ## Run go vet and govulncheck. Use security-gosec for additional checks.
+	@echo "  security: vet + govulncheck done"
+
+.PHONY: check
+check: lint test security ## Run all quality and security checks (lint, test, security-vuln).
+	@echo "  all checks passed"
 
 # ─── Maintenance ──────────────────────────────────────────────────────────────
 

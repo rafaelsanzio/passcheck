@@ -1,6 +1,4 @@
-//go:build echo
-
-package middleware
+package passcheckecho
 
 import (
 	"bytes"
@@ -10,13 +8,20 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rafaelsanzio/passcheck/middleware"
 )
+
+// testResponseBody mirrors the JSON shape returned by the middleware on rejection.
+type testResponseBody struct {
+	Error string `json:"error"`
+	Score int    `json:"score"`
+}
 
 func TestEcho_WeakPassword_Returns400(t *testing.T) {
 	e := echo.New()
 	e.POST("/register", func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
-	}, Echo(Config{MinScore: 60}))
+	}, Echo(middleware.Config{MinScore: 60}))
 
 	body := bytes.NewReader([]byte(`{"password":"123"}`))
 	req := httptest.NewRequest(http.MethodPost, "/register", body)
@@ -27,7 +32,7 @@ func TestEcho_WeakPassword_Returns400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	var res weakPasswordBody
+	var res testResponseBody
 	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -42,7 +47,7 @@ func TestEcho_StrongPassword_CallsNext(t *testing.T) {
 	e.POST("/register", func(c echo.Context) error {
 		nextCalled = true
 		return c.String(http.StatusOK, "registered")
-	}, Echo(Config{MinScore: 60}))
+	}, Echo(middleware.Config{MinScore: 60}))
 
 	body := bytes.NewReader([]byte(`{"password":"MyC0mpl3x!P@ss2024"}`))
 	req := httptest.NewRequest(http.MethodPost, "/register", body)

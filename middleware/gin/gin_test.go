@@ -1,6 +1,4 @@
-//go:build gin
-
-package middleware
+package passcheckgin
 
 import (
 	"bytes"
@@ -9,14 +7,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	ginfx "github.com/gin-gonic/gin"
+	"github.com/rafaelsanzio/passcheck/middleware"
 )
 
-func init() { gin.SetMode(gin.TestMode) }
+func init() { ginfx.SetMode(ginfx.TestMode) }
+
+// testResponseBody mirrors the JSON shape returned by the middleware on rejection.
+type testResponseBody struct {
+	Error string `json:"error"`
+	Score int    `json:"score"`
+}
 
 func TestGin_WeakPassword_Returns400(t *testing.T) {
-	r := gin.New()
-	r.POST("/register", Gin(Config{MinScore: 60}), func(c *gin.Context) {
+	r := ginfx.New()
+	r.POST("/register", Gin(middleware.Config{MinScore: 60}), func(c *ginfx.Context) {
 		c.String(http.StatusOK, "ok")
 	})
 
@@ -29,7 +34,7 @@ func TestGin_WeakPassword_Returns400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	var res weakPasswordBody
+	var res testResponseBody
 	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -39,9 +44,9 @@ func TestGin_WeakPassword_Returns400(t *testing.T) {
 }
 
 func TestGin_StrongPassword_CallsNext(t *testing.T) {
-	r := gin.New()
+	r := ginfx.New()
 	nextCalled := false
-	r.POST("/register", Gin(Config{MinScore: 60}), func(c *gin.Context) {
+	r.POST("/register", Gin(middleware.Config{MinScore: 60}), func(c *ginfx.Context) {
 		nextCalled = true
 		c.String(http.StatusOK, "registered")
 	})

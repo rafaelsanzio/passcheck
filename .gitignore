@@ -42,3 +42,15 @@ __debug_bin*
 
 # Vendor (optional, uncomment if not vendoring)
 # vendor/
+
+/wasm/web/node_modules/
+/wasm/web/dist/
+/wasm/web/.vscode/
+/wasm/web/.idea/
+/wasm/web/.DS_Store
+/wasm/web/.npmrc
+/wasm/web/.npmignore
+/wasm/web/.npm-cache*/
+
+/implementation/
+/scripts/
