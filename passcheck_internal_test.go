@@ -10,8 +10,8 @@ import (
 
 func TestConstantSynchronization(t *testing.T) {
 	tests := []struct {
-		name    string
-		public  string
+		name     string
+		public   string
 		internal string
 	}{
 		{"CodeRuleTooShort", CodeRuleTooShort, issue.CodeRuleTooShort},
@@ -117,7 +117,7 @@ func TestResolveVerdict_DefaultAndCustomThresholds(t *testing.T) {
 		for _, score := range []int{0, 25, 50, 75, 90} {
 			got := resolveVerdict(score, nil)
 			want := scoring.Verdict(score)
-			if got != string(want) {
+			if got != want {
 				t.Errorf("resolveVerdict(%d, nil) = %q, want %q", score, got, want)
 			}
 		}
@@ -133,10 +133,9 @@ func TestResolveVerdict_DefaultAndCustomThresholds(t *testing.T) {
 		for _, score := range []int{5, 15, 30, 60, 90} {
 			got := resolveVerdict(score, vt)
 			want := scoring.VerdictWith(score, vt.VeryWeakMax, vt.WeakMax, vt.OkayMax, vt.StrongMax)
-			if got != string(want) {
+			if got != want {
 				t.Errorf("resolveVerdict(%d, custom) = %q, want %q", score, got, want)
 			}
 		}
 	})
 }
-
