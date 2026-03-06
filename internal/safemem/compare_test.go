@@ -42,6 +42,28 @@ func TestConstantTimeCompare_DifferentContent(t *testing.T) {
 	}
 }
 
+func TestConstantTimeEqual(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want int
+	}{
+		{name: "equal empty", a: "", b: "", want: 1},
+		{name: "equal non-empty", a: "secret", b: "secret", want: 1},
+		{name: "different content", a: "secret", b: "secreT", want: 0},
+		{name: "different length", a: "a", b: "aa", want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ConstantTimeEqual(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("ConstantTimeEqual(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConstantTimeContains_EmptyNeedle(t *testing.T) {
 	if !ConstantTimeContains("anything", "") {
 		t.Error("empty needle should match (convention)")

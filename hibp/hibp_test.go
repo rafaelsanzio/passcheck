@@ -1,6 +1,7 @@
 package hibp
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -204,6 +205,158 @@ func TestCheckHash_ConnectionFails(t *testing.T) {
 		t.Error("expected error when connection fails")
 	}
 }
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Now()
+	future := now.Add(2 * time.Second).UTC().Format(http.TimeFormat)
+	past := now.Add(-2 * time.Second).UTC().Format(http.TimeFormat)
+
+	tests := []struct {
+		name   string
+		header string
+		check  func(d time.Duration) bool
+	}{
+		{
+			name:   "empty",
+			header: "",
+			check:  func(d time.Duration) bool { return d == 0 },
+		},
+		{
+			name:   "seconds",
+			header: "5",
+			check:  func(d time.Duration) bool { return d == 5*time.Second },
+		},
+		{
+			name:   "http-date_future",
+			header: future,
+			check:  func(d time.Duration) bool { return d > 0 },
+		},
+		{
+			name:   "http-date_past",
+			header: past,
+			check:  func(d time.Duration) bool { return d == 0 },
+		},
+		{
+			name:   "invalid",
+			header: "not-a-date",
+			check:  func(d time.Duration) bool { return d == 0 },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseRetryAfter(tt.header); !tt.check(got) {
+				t.Errorf("parseRetryAfter(%q) = %v", tt.header, got)
+			}
+		})
+	}
+}
+
+func TestJitterRange(t *testing.T) {
+	const max = 10 * time.Millisecond
+	for i := 0; i < 100; i++ {
+		d := jitter(max)
+		if d < 0 || d >= max {
+			t.Fatalf("jitter(%v) produced out-of-range value: %v", max, d)
+		}
+	}
+
+	if got := jitter(0); got != 0 {
+		t.Errorf("jitter(0) = %v, want 0", got)
+	}
+	if got := jitter(-1); got != 0 {
+		t.Errorf("jitter(-1) = %v, want 0", got)
+	}
+}
+
+func TestRetryDelayUsesBaseAndCaps(t *testing.T) {
+	c := NewClient()
+	c.RetryBaseDelay = 10 * time.Millisecond
+
+	d0 := c.retryDelay(0)
+	if d0 <= 0 {
+		t.Errorf("retryDelay(0) = %v, want > 0", d0)
+	}
+
+	// Large attempt index should not exceed maxRetryDelay by a large margin.
+	dHigh := c.retryDelay(10)
+	if dHigh <= 0 {
+		t.Errorf("retryDelay(10) = %v, want > 0", dHigh)
+	}
+	if dHigh > maxRetryDelay+DefaultRetryBaseDelay {
+		t.Errorf("retryDelay(10) = %v, expected near maxRetryDelay=%v", dHigh, maxRetryDelay)
+	}
+}
+
+func TestIsRetryable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "empty", err: errors.New(""), want: false},
+		{name: "429 code", err: errors.New("hibp: API returned 429 Too Many Requests"), want: true},
+		{name: "Too Many Requests text", err: errors.New("hibp: API returned status Too Many Requests"), want: true},
+		{name: "other error", err: errors.New("hibp: API returned 500 Internal Server Error"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRetryable(tt.err)
+			if got != tt.want {
+				t.Errorf("isRetryable(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewMemoryCacheWithTTLOverridesDefault(t *testing.T) {
+	c := NewMemoryCacheWithTTL(10, 2*time.Second)
+	if c.ttl != 2*time.Second {
+		t.Errorf("ttl = %v, want %v", c.ttl, 2*time.Second)
+	}
+
+	// Non-positive TTL should fall back to DefaultCacheTTL.
+	c2 := NewMemoryCacheWithTTL(5, 0)
+	if c2.ttl != DefaultCacheTTL {
+		t.Errorf("ttl = %v, want DefaultCacheTTL=%v", c2.ttl, DefaultCacheTTL)
+	}
+}
+
+func TestMockClient_CheckHashPrefersSpecificFuncAndFallsBack(t *testing.T) {
+	var hashCalled bool
+	m := &MockClient{
+		CheckFunc: func(password string) (bool, int, error) {
+			return password == "from-check", 1, nil
+		},
+		CheckHashFunc: func(hash string) (bool, int, error) {
+			hashCalled = true
+			return hash == "from-hash", 2, nil
+		},
+	}
+
+	breached, count, err := m.CheckHash("from-hash")
+	if err != nil {
+		t.Fatalf("CheckHash returned error: %v", err)
+	}
+	if !breached || count != 2 || !hashCalled {
+		t.Errorf("CheckHash (with CheckHashFunc) = breached=%v count=%d hashCalled=%v", breached, count, hashCalled)
+	}
+
+	// Clear CheckHashFunc to exercise fallback to CheckFunc.
+	m.CheckHashFunc = nil
+	hashCalled = false
+
+	breached, count, err = m.CheckHash("from-check")
+	if err != nil {
+		t.Fatalf("CheckHash (fallback) returned error: %v", err)
+	}
+	if !breached || count != 1 || hashCalled {
+		t.Errorf("CheckHash (fallback) = breached=%v count=%d hashCalled=%v", breached, count, hashCalled)
+	}
+}
+
 
 // --- Benchmarks (performance AC: cached <100ms, API call <500ms) ---
 
